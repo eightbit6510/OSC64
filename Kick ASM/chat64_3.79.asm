@@ -1149,8 +1149,7 @@ rts
                                                   // 
 !m1:                                              // 
                                                   // 
-!home:                                            // 
-    //jsr !wait_cursor_invisible+                   // 
+!home:                                            //  
     lda DO_RESTORE_MESSAGE_LINES                  // 
     cmp #1                                        // 
     bne !+                                        // 
@@ -1165,20 +1164,24 @@ rts
     lda #0; sta $00cc                             // Show cursor
     lda CURSORCOLOR                               // Load 5 in accumulator (petscii code for color white)
     jsr $ffd2                                     // Output that petscii code to screen to change the cursor to white                                                  
-    jsr !fix_inverted_chars+                                              // 
+    jsr !fix_inverted_chars+                      // 
 !keyinput:                                        //     
     jsr !check_for_messages+                      // 
     lda #0                                        // write zero to address $d4
     sta $d4                                       // to disable "quote mode" (special characters for cursor movement and such) 
 !:  jsr $ffe4                                     // Call kernal routine: Get character from keyboard buffer
     beq !keyinput-                                // Loop if there is none
+    
     cmp #141                                      // Shift+Return or C=+Return will send the message immediately
     bne !+                                        // 
     rts                                           // 
 !:  cmp #221                                      // Shift Minus gives a vertical bar, we replace it with underscore
     bne !+                                        // If it is any other key, skip to the next !: marker
     lda #228                                      // Change the character into an underscore
-!:  cmp #133                                      // F1 key pressed?
+    jmp !++
+!:  
+    jsr !preventGraphChars+
+    cmp #133                                      // F1 key pressed?
     bne !+                                        // No, try the next possible match
     jmp !exit_F1+                                 // Yes, jump to exit F1
 !:  cmp #134                                      // F3 key pressed?
@@ -1265,9 +1268,9 @@ rts
     ldx $d6                                       // $d6 alway contains the current line of the cursor position
     cpx LIMIT_LINE                                // 
     bne !+                                        // 
-    jsr !fix_inverted_chars+
+    jsr !fix_inverted_chars+                      //
     rts                                           // Return to caller, this exits the keyinput routine! 
-!:  //jsr !wait_cursor_invisible+                   // wait for the cursor to go invissible before we reposition the cursor       
+!:  //jsr !wait_cursor_invisible+                 // wait for the cursor to go invissible before we reposition the cursor       
     clc                                           // clear carry bit so we can SET the cursor position
     inx                                           // x has the line number, so increase that                                     
     ldy #0                                        // Select column to zero (start of the line)
@@ -1328,9 +1331,9 @@ rts
     jmp !main_chat_screen-                        // and return to the main chat
                                                   // 
 !exit_F7:                                         // This exits TO the main menu or exits to the main chat screen from the private chat screen
-    lda MENU_ID
-    cmp #0
-    bne !+
+    lda MENU_ID                                   //
+    cmp #0                                        //
+    bne !+                                        //  
     lda SCREEN_ID                                 // Load the menu ID in accu
     cmp #0                                        // Compare it to zero (zero is the main chat screen), F7 does nothing in that screen
     beq !exit-                                    // If not equal, jump back up into the key input routine
@@ -1344,7 +1347,23 @@ rts
     bne !+                                        // 
     jmp !reset_factory-                           // 
 !:  jmp !exit-                                    //                                               
-
+                                                  //
+!preventGraphChars:                               //
+    cmp #94                                       // ignore arrow up
+    beq !ignore+                                  //
+    cmp #95                                       // ignore arrow to left
+    beq !ignore+                                  //
+    cmp #219                                      // ignore everything above 219
+    bcs !ignore+                                  //
+    cmp #160                                      // ignore every thing between 160 and 192 
+    bcc !exit+                                    //
+    cmp #192                                      //
+    bcc !ignore+                                  //
+!exit:                                            //
+    rts                                           //
+!ignore:                                          //
+    lda #0                                        //
+    rts                                           //
 //=========================================================================================================
 // SUB ROUTINE, CHECK FOR UPDATES
 //=========================================================================================================
@@ -2595,9 +2614,9 @@ text_menu_item_4:             .byte 147; .text "[ F4 ] Server Setup";.byte 128
 text_menu_item_6:             .byte 147; .text "[ F5 ] About Private Messaging";.byte 128
 text_menu_item_5:             .byte 147; .text "[ F6 ] About This Software";.byte 128
 text_version:                 .byte 151; .text "Version";.byte 128
-version:                      .byte 151; .text "3.75"; .byte 128
+version:                      .byte 151; .text "3.76"; .byte 128
 versionmask:                  .byte 151; .text "ROM x.xx ESP x.xx"; .byte 128
-version_date:                 .byte 151; .text "10/2024";.byte 128
+version_date:                 .byte 151; .text "11/2024";.byte 128
 text_wifi_menu:               .byte 151; .text "WIFI SETUP"; .byte 128
 text_wifi_ssid:               .byte 145; .text "SSID:"; .byte 128
 text_wifi_password:           .byte 145; .text "Password:"; .byte 128

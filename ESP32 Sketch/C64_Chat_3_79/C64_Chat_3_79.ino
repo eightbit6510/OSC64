@@ -453,7 +453,6 @@ void loop() {
           // find first {
           while (cc != '{' and p < 10) {
             cc = multiMessageBufferPub[pos0++];
-
             p++;
           }
           // fill buffer until we find '}'
@@ -497,8 +496,8 @@ void loop() {
             haveMessage = 0;
           } else {  // no public messages :-(
             sendByte(128);
+            
           }
-
           break;
         }
 
