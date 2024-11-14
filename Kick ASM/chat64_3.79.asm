@@ -254,6 +254,8 @@ rts
                                                   // 
 //=========================================================================================================
 !mainmenu:                                        // 
+    lda $0286
+    sta TEMPCOLOR
     lda #1                                        //
     sta MENU_ID
     sta RETURNTOMENU                              //
@@ -351,6 +353,9 @@ rts
                                                   // 
 !exit_menu:                                       //                                  
 !exit_main_menu:                                  // F7 Pressed, prepare to exit to chat screen
+    lda TEMPCOLOR
+    sta CURSORCOLOR
+
     lda SCREEN_ID                                 // 
     cmp #3                                        // 
     beq !p+                                       // 
@@ -420,7 +425,8 @@ rts
     displayText(SPLITBUFFER,8, 23)                // Display the buffers on screen (time offset from GMT)
                                                   //                                                  
 !notVice:                                         // 
-                                                  // Set the limits to where the cursor can travel
+    lda #156                                      // Set the limits to where the cursor can travel
+    sta CURSORCOLOR
     lda #4                                        // Load 4 into accumulator
     sta HOME_LINE                                 // Store 4 into Home_line variable, so the cursor van not go above line 4
     sta LIMIT_LINE                                // Store 4 into limit_line variable so the cursor van not go below line 4
@@ -435,6 +441,8 @@ rts
     sta CLEAR_FIELD_FLAG                          // and SET clear text flag to 1 (default is zero)
     jsr !text_input+                              // Call the text input routine, we will be back when the user presses RETURN
                                                   // 
+    lda #31                                       // Set the limits to where the cursor can travel
+    sta CURSORCOLOR
     lda #6                                        // Load 6 into accumulator
     sta LIMIT_LINE                                // Store 6 into limit_line variable so the cursor van not go below line 24
     sta HOME_LINE                                 // Store 6 into Home_line variable, so the cursor van not go above line 22
@@ -444,6 +452,8 @@ rts
     sta CLEAR_FIELD_FLAG                          // SET clear text flag to 1 (default is zero)
     jsr !text_input+                              // Call text input routine, we will be back when the user presses RETURN
                                                   //
+    lda #149                                      // Set the limits to where the cursor can travel
+    sta CURSORCOLOR
     lda #8                                        // Load 8 into accumulator
     sta LIMIT_LINE                                // Store 8 into limit_line variable so the cursor van not go below line 24
     sta HOME_LINE                                 // Store 8 into Home_line variable, so the cursor van not go above line 22
@@ -612,6 +622,8 @@ jsr !splitRXbuffer+                               // copy the first element to S
     sta LIMIT_COLM                                // Store 39 into the limit_column so the cursor can not go beyond that position
     lda #1                                        // Load 1 intop accumulator
     sta CLEAR_FIELD_FLAG                          // and SET clear text flag to 1 (default is zero)
+    lda #31
+    sta CURSORCOLOR
     jsr !text_input+                              // Call the text input routine, we will be back when the user presses RETURN
     lda #8                                        // Load 6 into accumulator
     sta HOME_LINE                                 // Store 6 into Home_line variable, so the cursor van not go above line 22
@@ -622,6 +634,8 @@ jsr !splitRXbuffer+                               // copy the first element to S
     sta LIMIT_COLM                                // Store 22 into the limit_column so the cursor can not go beyond that position
     lda #1                                        // 
     sta CLEAR_FIELD_FLAG                          // 
+    lda #149
+    sta CURSORCOLOR
     jsr !text_input+                              // Call the text input routine, we will be back when the user presses RETURN
     //jsr !wait_cursor_invisible+                   // 
     lda #$01; sta $cc                             // Hide the cursor
@@ -1446,7 +1460,7 @@ rts
     beq !throttle_down+                           // that's fine, continue
     cmp #3                                        // screen 3 is the private chat screen
     beq !throttle_down+                           // that's also fine, please go on
-!ex:jmp !exit+                                    // Not 0 or 3, please jump to the exit
+!ex:rts                                           // Not 0 or 3, just return
                                                   // 
                                                   // 
 !throttle_down:                                   // this subroutine is triggered many times per second, way too often
@@ -2540,7 +2554,7 @@ rts                                               //
     sta RXFULL                                    // reset the rxfull flag
     jsr !wait_for_ready_to_receive-               // 
     lda CMD                                       // load the byte from variable CMD
-    sta $de00                                     // write the byte to IO1
+    sta $DE00                                     // write the byte to IO1
                                                   // 
     lda #0                                        // 
     sta TIMEOUT1                                  // we need a simple timeout on this next loop
@@ -2553,7 +2567,7 @@ rts                                               //
     inc TIMEOUT2                                  // increase timout2 when timeout1 overloops
     lda TIMEOUT2                                  //
     cmp #170                                      // when timeout2 reaches a certain number, exit the loop
-    beq !exit+                                    //
+    beq !exittimeout+                                    //
 !:                                                //
     lda RXFULL                                    // load RXFULL flag
     cmp #0                                        // compare with zero
@@ -2561,11 +2575,10 @@ rts                                               //
 !exit:                                            // 
     rts                                           // return
 !vicemode:                                        // 
-    lda #128                                      // load 128
-    sta RXBUFFER                                  // in vice mode, we empty the buffer (128 is the end marker)
-    rts                                           // return
-                                                  //
-                                                 
+!exittimeout:                                     //
+   lda #128                                       // there was a timeout empty the buffer                                             
+   sta RXBUFFER  
+   rts
 
 //=========================================================================================================
 // NMI ROUTINE
