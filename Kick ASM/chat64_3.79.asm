@@ -30,6 +30,7 @@ main_init:                                        //
     lda #5                                        //
     sta $9c                                       // default line color (green)
     lda #0                                        // 
+    sta PRINTIT
     sta $d020                                     // Set black screen
     sta $d021                                     // Set black border
     lda #144                                      // Load petscii code for Black Cursor
@@ -1511,7 +1512,8 @@ rts
                                                   // 
 !dispmessage:                                     // 
 
-                                                  // we have a message to display
+    lda #1                                              
+    sta PRINTIT                                   // we have a message to display
     jsr !soundbell+                               // make some noise now, there's a message!
     lda #2                                        // reset the check interval
     sta CHECKINTERVAL                             // 
@@ -1545,7 +1547,9 @@ rts
     sta $fb                                       // 
     lda #>(RXBUFFER)                              // 
     sta $fc                                       // 
+    jsr !preparePrintBuffer+
     jsr !displaytextK+                            // 
+    jsr !printTextK+
     lda #0                                        // 
     sta OFFSET                                    // reset the offset buffer.
     jsr !ask_last_pm_sender+                      // 
@@ -2384,7 +2388,74 @@ rts                                               //
                                                   // 
 !exit:                                            // at this point we encountered byte 128 in out text string, so we escaped the loop
     rts                                           // return to sender ;-)
-                                                  // 
+
+
+//=====
+//
+//=====
+!preparePrintBuffer:   
+    ldy OFFSET
+    ldx #0
+    
+!readbuffer:    
+    
+    lda ($fb),y                                   // load a character from the text with y as index this is Indirect-indexed addressing, $fb-$fc contains a pointer to the real address
+    cmp #128                                      // compare it to 128, that is the end marker of the text we want to display
+    beq !exit+                                    // if equal, exit the loop
+    cmp #144
+    bcs !skip+ 
+    
+    stx $ff
+    tax
+    lda SCREEN2ASCII,x  // fetch the ascii code from the array, with y as index
+                        // now the accumulator contains the ascii code
+
+    ldx $ff
+    sta PRINTERBUFFER,x
+    iny
+    inx
+    jmp !readbuffer-
+!skip:    
+    iny
+    jmp !readbuffer-
+!exit:
+    lda #10
+    sta PRINTERBUFFER,x
+    inx
+    lda #0
+    sta PRINTERBUFFER,x
+rts    
+//===== 
+// SUBROUTINE FOR PRINTING 
+// $fb $fc
+//===== 
+!printTextK:
+    lda PRINTIT
+    cmp #1
+    beq !+
+    rts
+!:
+    
+    lda #4
+    ldx #4
+    ldy #7
+    sty PRINTIT
+    jsr $ffba  
+    jsr $ffc0
+    ldx #4
+    jsr $ffc9
+    inc $d020
+    
+    lda #<PRINTERBUFFER
+    ldy #>PRINTERBUFFER
+    jsr $ab1e
+!:    
+    // close
+    lda #4
+    jsr $ffc3
+    jsr $ffcc
+rts
+
 //=========================================================================================================
 // SUB ROUTINE, DELAY
 //=========================================================================================================
@@ -2734,10 +2805,27 @@ HAVE_ML_BACKUP:               .byte 0             //
 VICEMODE:                     .byte 0             //                                                  
 CHECKINTERVAL:                .byte 80            //                                                  
 RETURNTOMENU:                 .byte 0                                                  
+PRINTIT: .byte 0                        
+SCREEN2ASCII:
+.byte   64, 97, 98, 99, 100, 69, 102, 103, 104, 105      //   0 -   9
+.byte  106, 107, 108, 109, 110, 111, 112, 113, 114, 115   //  10 -  19
+.byte  116, 117, 118, 119, 120, 121, 122, 91, 92, 93      //  20 -  29
+.byte   94, 95, 32, 33, 34, 125, 36, 37, 38, 39           //  30 -  39
+.byte   40, 41, 42, 43, 44, 45, 46, 47, 48, 49            //  40 -  49
+.byte   50, 51, 52, 53, 54, 55, 56, 57, 58, 59            //  50 -  59
+.byte   60, 61, 62, 63, 95, 65, 66, 67, 68, 69            //  60 -  69
+.byte   70, 71, 72, 73, 74, 75, 76, 77, 78, 79            //  70 -  79
+.byte   80, 81, 82, 83, 84, 85, 86, 87, 88, 89            //  80 -  89
+.byte   90, 43, 32, 124, 32, 32, 32, 32, 32, 32           //  90 -  99
+.byte   95, 32, 32, 32, 32, 32, 32, 32, 32, 32            // 100 - 109
+.byte   32, 95, 32, 32, 32, 32, 32, 32, 32, 32            // 110 - 119
+.byte   32, 32, 32, 32, 32, 32, 32, 32, 32,32             // 120 - 129        
+        
 //=========================================================================================================
 // VARIABLE BUFFERS
 //=========================================================================================================
 .segment Variables [start=$3000, max=$4fff, virtual]
+PRINTERBUFFER:                   .fill 125,0
 USER_LIST_FLAG:               .byte 0             // User list source flag   
 READLIMIT:                    .byte 0             // How many chars to read from screen (in configuration screens)
 INVERT:                       .byte 0             // Invert the text (used in system messages)       
