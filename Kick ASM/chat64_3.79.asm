@@ -2381,9 +2381,9 @@ rts                                               //
     rts                                           // return to sender ;-)
 
 
-//=====
-//
-//=====
+//=========================================================================================================
+// Prepare the print buffer
+//=========================================================================================================
 !preparePrintBuffer:   
     ldy OFFSET
     ldx #0
@@ -2398,13 +2398,21 @@ rts                                               //
     
     stx $ff
     tax
-    lda SCREEN2ASCII,x  // fetch the ascii code from the array, with y as index
-                        // now the accumulator contains the ascii code
-
+    lda SCREEN2ASCII,x                            // fetch the Petsci code from the array, with x as index
+                                                  // now the accumulator contains the Petsci code
     ldx $ff
     sta PRINTERBUFFER,x
     iny
     inx
+    cpx #78                                       // insert newlines before we reach 80 characters
+    beq !newline+
+    cpx #156                                      // insert newline before we reach the end of the second line
+    beq !newline+
+    jmp !readbuffer-
+!newline:              
+    lda #10
+    sta PRINTERBUFFER,x
+    inx 
     jmp !readbuffer-
 !skip:    
     iny
@@ -2416,17 +2424,16 @@ rts                                               //
     lda #0
     sta PRINTERBUFFER,x
 rts    
-//===== 
+//=========================================================================================================
 // SUBROUTINE FOR PRINTING 
 // $fb $fc
-//===== 
+//========================================================================================================= 
 !printTextK:
     lda PRINTIT
     cmp #1
     beq !+
     rts
 !:
-    
     lda #4
     ldx #4
     ldy #7
@@ -2799,7 +2806,7 @@ SCREEN2ASCII:
 // VARIABLE BUFFERS
 //=========================================================================================================
 .segment Variables [start=$3000, max=$4fff, virtual]
-PRINTERBUFFER:                   .fill 125,0
+PRINTERBUFFER:                .fill 165,0
 USER_LIST_FLAG:               .byte 0             // User list source flag   
 READLIMIT:                    .byte 0             // How many chars to read from screen (in configuration screens)
 INVERT:                       .byte 0             // Invert the text (used in system messages)       
