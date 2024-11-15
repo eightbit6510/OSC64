@@ -58,7 +58,7 @@ main_init:                                        //
     cmp #1                                        //
     bne !+                                        //
     jsr !sounderror+                              // error sound because cartridge was not found!
-    
+                                                  //
 !:  jmp !main_chat_screen+                        // 
                                                   // 
 !mainmenu:                                        // 
@@ -247,7 +247,6 @@ rts
 //     MAIN MENU
 //=========================================================================================================
 !start_menu_screen:                               // 
-    //jsr !wait_cursor_invisible+                   // 
     lda #1; sta $cc                               // Cursor off
     jsr $E544                                     // Clear screen
     jsr !draw_top_menu_lines+                     // 
@@ -462,9 +461,7 @@ rts
     sta HOME_COLM                                 // Store 14 into home_column variable, so the cursor can not go below 10
     lda #1                                        // Load 1 into the accumulator
     sta CLEAR_FIELD_FLAG                          // SET clear text flag to 1 (default is zero)
-    jsr !text_input+                              // Call text input routine, we will be back when the user presses RETURN
-                                                  // 
-    //jsr !wait_cursor_invisible+                   // 
+    jsr !text_input+                              // Call text input routine, we will be back when the user presses RETURN 
     lda #$01; sta $cc                             // Hide the cursor
                                                   // 
     displayText(text_save_settings,14,3)          // 
@@ -638,7 +635,6 @@ jsr !splitRXbuffer+                               // copy the first element to S
     lda #149
     sta CURSORCOLOR
     jsr !text_input+                              // Call the text input routine, we will be back when the user presses RETURN
-    //jsr !wait_cursor_invisible+                   // 
     lda #$01; sta $cc                             // Hide the cursor
                                                   // 
     displayText(text_save_settings,13,3)          // Display "[ F1 Save settings" on line 13, row 3 
@@ -697,7 +693,6 @@ jsr !splitRXbuffer+                               // copy the first element to S
                                                   // 
 !reset_factory:                                   // 
                                                   // 
-    jsr !wait_cursor_invisible+                   // we need this to prevent strange left over dead cursors on the screen at random places
     lda #$01; sta $cc                             // Hide the cursor
     jsr $e544                                     // Clear screen
                                                   // 
@@ -801,7 +796,6 @@ jsr !splitRXbuffer+                               // copy the first element to S
     lda #39                                       // Load 35 into accumulator
     sta LIMIT_COLM                                // Store 39 into the limit_column so the cursor can not go beyond that position
     jsr !text_input+                              // Call the text input routine, we will be back when the user presses RETURN
-    //jsr !wait_cursor_invisible+                   // 
     lda #$01; sta $cc                             // Hide the cursor
                                                   // 
     displayText(text_save_settings,15,3)          // display "[ F1 ] Save Settings" on line 15, row 3
@@ -1142,7 +1136,6 @@ rts
 !text_input:                                      // 
                                                   // 
 !clearhome:                                       // 
-    //jsr !wait_cursor_invisible+                   // 
     lda MENU_ID                                   // Load the menu ID
     cmp #1                                        // If menu ID is 1
     beq !m1+                                      // We do not want to clear the lines
@@ -1284,9 +1277,8 @@ rts
     cpx LIMIT_LINE                                // 
     bne !+                                        // 
     jsr !fix_inverted_chars+                      //
-    rts                                           // Return to caller, this exits the keyinput routine! 
-!:  //jsr !wait_cursor_invisible+                 // wait for the cursor to go invissible before we reposition the cursor       
-    clc                                           // clear carry bit so we can SET the cursor position
+    rts                                           // Return to caller, this exits the keyinput routine!        
+!:  clc                                           // clear carry bit so we can SET the cursor position
     inx                                           // x has the line number, so increase that                                     
     ldy #0                                        // Select column to zero (start of the line)
     jsr $fff0                                     // call the set cursor kernal routine 
@@ -1679,7 +1671,6 @@ rts
     lda SCREEN_ID                                 // Load our screen ID
     cmp #3                                        // Are we in the private chat screen?
     bne !exit+                                    // if no, exit routine
-    jsr !wait_cursor_invisible+                   // 
     lda #$01; sta $cc                             // Hide the cursor
     lda #242                                      // 242 if the command to ask for the last pmuser
     sta CMD                                       // 
@@ -2490,23 +2481,6 @@ rts
    // so it makes sense to use a soub routine for this
    displayText(text_exit_menu,17,3)                                                  
    rts                                                   
-//=========================================================================================================
-// SUB ROUTINE, WAIT FOR CURSOR INVISIBLE PHASE
-//=========================================================================================================
-!wait_cursor_invisible:                           // wait for the cursor to disapear before moving it  
-
-    pha                                           // keep accumulator safe
-    lda $CC                                       // there is no need to wait if the cursor if off
-    cmp #00                                       // so if address $CC contains a number (not null), we can exit
-    bne !exit+                                    //  
-!waitloop:                                        // start a loop
-    lda #0; sta $CC                               // show the cursor (the program can hang without this line in this loop..)
-    lda $cf                                       // when the value in this address goes zero, the cursor is in it's invisible phase
-    cmp #0
-    bne !waitloop-                                // wait for zero
-!exit:
-    pla                                           // restore the accumulator
-    rts                                           // 
 
 //=========================================================================================================
 // SUB ROUTINE, FIX INVERTED CHARACTERS IN THE MESSAGE LINES
@@ -2807,16 +2781,16 @@ CHECKINTERVAL:                .byte 80            //
 RETURNTOMENU:                 .byte 0                                                  
 PRINTIT: .byte 0                        
 SCREEN2ASCII:
-.byte   64, 97, 98, 99, 100, 69, 102, 103, 104, 105      //   0 -   9
-.byte  106, 107, 108, 109, 110, 111, 112, 113, 114, 115   //  10 -  19
-.byte  116, 117, 118, 119, 120, 121, 122, 91, 92, 93      //  20 -  29
-.byte   94, 95, 32, 33, 34, 125, 36, 37, 38, 39           //  30 -  39
+.byte   64, 65, 66, 67, 68, 69, 70, 71, 72, 73            //   0 -   9
+.byte  74, 75, 76, 77, 78, 79, 80,81, 82, 83              //  10 -  19
+.byte  84, 85, 86, 87, 88, 89, 90, 91, 92, 93             //  20 -  29
+.byte   94, 95, 32, 33, 34, 35, 36, 37, 38, 39            //  30 -  39
 .byte   40, 41, 42, 43, 44, 45, 46, 47, 48, 49            //  40 -  49
 .byte   50, 51, 52, 53, 54, 55, 56, 57, 58, 59            //  50 -  59
-.byte   60, 61, 62, 63, 95, 65, 66, 67, 68, 69            //  60 -  69
-.byte   70, 71, 72, 73, 74, 75, 76, 77, 78, 79            //  70 -  79
-.byte   80, 81, 82, 83, 84, 85, 86, 87, 88, 89            //  80 -  89
-.byte   90, 43, 32, 124, 32, 32, 32, 32, 32, 32           //  90 -  99
+.byte   60, 61, 62, 63, 192, 193, 194, 195, 196, 197      //  60 -  69
+.byte  198,199,200,201,202,203,204,205,206,207            //  70 -  79
+.byte  208,209,210,211,212,213,214,215,216,217            //  80 -  89
+.byte  218,219, 32, 121, 32, 32, 32, 32, 32, 32           //  90 -  99
 .byte   95, 32, 32, 32, 32, 32, 32, 32, 32, 32            // 100 - 109
 .byte   32, 95, 32, 32, 32, 32, 32, 32, 32, 32            // 110 - 119
 .byte   32, 32, 32, 32, 32, 32, 32, 32, 32,32             // 120 - 129        
