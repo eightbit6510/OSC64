@@ -32,8 +32,8 @@ main_init:                                        //
     lda #0                                        // 
     sta $d020                                     // Set black screen
     sta $d021                                     // Set black border
-    sta PRINTER_ENABLED_FLAG					  // Set printer output to off
-    sta PRINTIT									  //	
+    sta PRINTER_ENABLED_FLAG                      // Set printer output to off
+    sta PRINTIT                                   //  
     lda #144                                      // Load petscii code for Black Cursor
     jsr $ffd2                                     // output black cursor to the screen
     ldx #24                                       // zero SID sound register (1)
@@ -454,7 +454,7 @@ rts
     jsr !text_input+                              // Call text input routine, we will be back when the user presses RETURN
                                                   //
     lda #149                                      // Set the limits to where the cursor can travel
-    sta CURSORCOLOR
+    sta CURSORCOLOR                               //
     lda #8                                        // Load 8 into accumulator
     sta LIMIT_LINE                                // Store 8 into limit_line variable so the cursor van not go below line 24
     sta HOME_LINE                                 // Store 8 into Home_line variable, so the cursor van not go above line 22
@@ -469,8 +469,7 @@ rts
                                                   // 
 !keyinput:                                        // At this point the user can select F1 or F7 to Save settings and Test settings, or exit the menu
                                                   // 
-    jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                                // Loop if there is none (Theo: Not needed, remmed out)
+    jsr !wait_for_a_key+                          //
     cmp #133                                      // F1 key pressed?
     beq !save_settings+                           // If true, save the WiFi settings
     cmp #136                                      // F7 key pressed?
@@ -642,8 +641,7 @@ jsr !splitRXbuffer+                               // copy the first element to S
                                                   // 
 !keyinput:                                        // At this point the user can select F1 or F7 to Save settings and Test settings, or exit the menu
                                                   // 
-    jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                                // Loop if there is none
+    jsr !wait_for_a_key+                          //
     cmp #133                                      // F1 key pressed?
     beq !save_settings+                           // If true, save the Account settings
     cmp #139                                      // F6 Key pressed?
@@ -700,8 +698,7 @@ jsr !splitRXbuffer+                               // copy the first element to S
     displayText(text_reset_shure,13,10);          // 
                                                   // 
 !keyinput:                                        // 
-    jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                                // Loop if there is none
+    jsr !wait_for_a_key+                          //
     cmp #138                                      // F4 pressed?
     beq !reset_for_real+                          // If true, we are going to default settings
     jmp !account_setup-                           // No, second thoughts, go back to config screen.
@@ -802,8 +799,7 @@ jsr !splitRXbuffer+                               // copy the first element to S
     displayText(text_save_settings,15,3)          // display "[ F1 ] Save Settings" on line 15, row 3
                                                   // 
 !keyinput:                                        // At this point the user can select F1 or F7 to Save settings and Test settings, or exit the menu
-    jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                                // Loop if there is none
+    jsr !wait_for_a_key+                          //
     cmp #133                                      // F1 key pressed?
     beq !save_settings+                           // If true, save the server settings
     cmp #136                                      // F7 key pressed?
@@ -896,30 +892,29 @@ jsr !splitRXbuffer+                               // copy the first element to S
     displayText(text_output_menu,1,13)            // Display the menu title on line 1, row 13       
     displayText(text_output_enable,16,3)          // display "[ F1 ] Enable Output" on line 16, row 3  
     displayText(text_output_disable,17,3)         // Display "[ F7 ] Disable Output" on line 17, row 3
-
-    lda PRINTER_ENABLED_FLAG					  // Get current status 
-    cmp #0
-    bne !+
-	displayText(text_disabled,4,12)				  // Display active status
-	jmp !keyinput+
+                                                  // 
+    lda PRINTER_ENABLED_FLAG                      // Get current status of the printer_enabled_flag 
+    cmp #0                                        // compare with zero (off) 
+    bne !+                                        // 
+    displayText(text_disabled,4,12)               // Display active status
+    jmp !keyinput+                                //
 !:  displayText(text_enabled,4,12)                // 
-
     lda #$01; sta $cc                             // Hide the cursor
                                                   //                                             // 
 !keyinput:                                        // At this point the user can select F1 or F7 to Save settings and Test settings, or exit the menu
                                                   // 
     jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
     cmp #133                                      // F1 key pressed?
-    bne !+										  // Yes, set printer output on.
-    lda #1										  // Set enabled flag	
-    sta PRINTER_ENABLED_FLAG					  // and store it
-    jmp !exit_menu+								  //
+    bne !+                                        // Yes, set printer output on.
+    lda #1                                        // Set enabled flag 
+    sta PRINTER_ENABLED_FLAG                      // and store it
+    jmp !exit_menu+                               //
 !:  cmp #136                                      // F7 key pressed?
     bne !keyinput-                                // If no match loopy loopy
-    lda #0		                                  // Set disabled flag
+    lda #0                                        // Set disabled flag
     sta PRINTER_ENABLED_FLAG                      // and store it
-	!exit_menu:      							  // F7 Pressed!
-	jmp !mainmenu-
+  !exit_menu:                                     // F7 Pressed!
+  jmp !mainmenu-                                  //
           
 //=========================================================================================================    
 //   UPDATE SCREEN   
@@ -945,9 +940,8 @@ jsr !splitRXbuffer+                               // copy the first element to S
     displayText(version_date,23,32)              // Software version info
     displayText(SWVERSION,23,22)                 //
                                                  // ask the cartridge for new version information
-    !keyinput:                                   // At this point the user can select Y or N
-    jsr $ffe4                                    // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                               // Loop if there is none
+!keyinput:                                       // At this point the user can select Y or N
+    jsr !wait_for_a_key+                         //
     cmp #78                                      // 'n' key pressed?
     beq !exit_menu+                              // If true, exit this page
     cmp #89                                      // 'y' key pressed?
@@ -1067,24 +1061,20 @@ jsr !start_menu_screen-                           //
     displayText(RXBUFFER,14,0)                    // 
                                                   // 
 !keyinput:                                        // At this point the user can select F7 to exit the menu or pres 'n' or 'p' for next page / previous page
-    jsr $ffe4                                     // Call KERNAL routine: Get character from keyboard buffer
-    beq !keyinput-                                // Loop if there is none
+    jsr !wait_for_a_key+                          //
     cmp #78                                       // 'n' key pressed?
     beq !nextpage+                                // If true, go to the next page
     cmp #80                                       // 'p' key pressed?
     beq !prevpage+                                // if so, go to previous page
     cmp #134                                      // F3 pressed?
     beq !return_to_chat+                          // if so, return to chat window
-//    cmp #136                                      // F7 key pressed?
-//    beq !exit_menu+                               // If true, exit to main menu
-//    jmp !keyinput-                                // Ignore all other keys and wait for user input again
                                                   // 
 !nextpage:                                        // 
     lda PAGE                                      // Load the Page number
     cmp #0                                        // Compare with zero
     bne !keyinput-                                // if we are not on the first page (so we are on the second page) we can not go forward (there are only 2 pages), so branch back to keyinput
     inc PAGE                                      // set Page to 1
-    jsr !clearusers+                              // clean the user list
+    jsr !clearinfofield+                          // clean the user list
     lda #233                                      // load the number #233
     sta CMD                                       // Store that in variable CMD
     jsr !send_start_byte_ff+                      // Call the sub routine to send 233 to the esp32 to ask for the the user list next page
@@ -1096,7 +1086,7 @@ jsr !start_menu_screen-                           //
     beq !keyinput-                                // if it is zero, there is no previous page, so jump back to keyinput
     lda #0                                        // set the page number back
     sta PAGE                                      // to zero
-    jsr !clearusers+                              // clean the list of users
+    jsr !clearinfofield+                          // clean the list of users
     jmp !zp-                                      // jump to the first page
                                                   // 
 !exit_menu:                                       // F7 Pressed!
@@ -1105,7 +1095,7 @@ jsr !start_menu_screen-                           //
     bne !return_to_chat+                          //
     jmp !mainmenu-                                // we jump back to main menu
                                                   // 
-!clearusers:                                      // 
+!clearinfofield:                                  // 
     ldx #4                                        // load 4 in x register
 !clearlines:                                      // start a loop
     jsr $E9FF                                     // this kernal routine clears line x, where x is the line number
@@ -1150,7 +1140,7 @@ jsr !start_menu_screen-                           //
     jmp !mainmenu-                                // we jump back to main menu
                                                   // 
 //=========================================================================================================
-//    HELP Screen about private chat
+//    HELP Screen  
 //=========================================================================================================
 !help_screen:                                     // 
                                                   // 
@@ -1158,17 +1148,42 @@ jsr !start_menu_screen-                           //
     lda #23 ; sta $fb                             // Load 23 into accumulator and store it in zero page address $fb
     jsr !draw_menu_line+                          // Call the draw_menu_line sub routine to draw a line on row 23
                                                   // 
-    displayText(text_help_pm,1,8)                 // 
+    displayText(text_help_pm,1,10)                // 
     displayText(text_help_private,4,1)            // 
-    jsr !footer_F7_exit+                          // Display footer [ F7 ] to exit this screen
-                                                  // 
+    displayText(text_any_key,24,7)                //
+                                                  //
+    jsr !wait_for_a_key+                          //
+    ldx #1 ; jsr $e9ff                            // clear line 1 
+    jsr !clearinfofield-                          // clear line 4 through 19
+    displayText(text_help_ai,1,10)                // 
+    displayText(text_help_eliza,4,1)              // 
+    displayText(text_any_key,24,7)                //
+                                                  //
+    jsr !wait_for_a_key+                          //
+    ldx #1 ; jsr $e9ff                            // clear line 1
+    jsr !clearinfofield-                          //
+    displayText(text_help_ul,1,10)                // 
+    displayText(text_help_userlist,4,1)           // 
+    ldx #24 ; jsr $e9ff                           // clear line 24        
+                                                  //
+    jsr !footer_F7_exit+                          // Display footer [ F7 ] to exit this screen                                                   
     jmp !f7_to_exit-                              // 
-                                                  // 
+
+    // 
 !footer_F7_exit:
    // we use this same text only twice but the displayText macro is quite heavy so
    // it makes sense to create a routine for this
    displayText(text_about_footer,24,8)
 rts
+
+//=========================================================================================================
+//    Function to wait for a key input
+//=========================================================================================================
+!wait_for_a_key:
+!wait_for_any_key:                                //
+    jsr $ffe4                                     // wait for any key                               
+    beq !wait_for_any_key-                        //
+    rts
 //=========================================================================================================
 //    Function for text input
 //=========================================================================================================
@@ -1580,9 +1595,9 @@ rts
     sta $fc                                       // 
     jsr !preparePrintBuffer+
     jsr !displaytextK+                            // 
-    lda PRINTER_ENABLED_FLAG					  // Do we have a printer enabled?
-    cmp	#1										  //
-    bne !+	
+    lda PRINTER_ENABLED_FLAG            // Do we have a printer enabled?
+    cmp #1                      //
+    bne !+  
     jsr !printTextK+
 !:  lda #0                                        // 
     sta OFFSET                                    // reset the offset buffer.
@@ -2426,75 +2441,71 @@ rts                                               //
 //=========================================================================================================
 // Prepare the print buffer
 //=========================================================================================================
-!preparePrintBuffer:   
-    ldy OFFSET
-    ldx #0
-    
-!readbuffer:    
-    
+!preparePrintBuffer:                              //
+    ldy OFFSET                                    // start reading the RXBUFFER with an offset
+    ldx #0                                        // x is out index to write the printerbuffer
+                                                  //
+!readbuffer:                                      // 
     lda ($fb),y                                   // load a character from the text with y as index this is Indirect-indexed addressing, $fb-$fc contains a pointer to the real address
     cmp #128                                      // compare it to 128, that is the end marker of the text we want to display
     beq !exit+                                    // if equal, exit the loop
-    cmp #144
-    bcs !skip+ 
-    
-    stx $ff
-    tax
+    cmp #144                                      // compare with 144
+    bcs !skip+                                    // anything >=144 we need to skip (unprintable color characters) 
+    stx $ff                                       // temporary save x
+    tax                                           // transfer A to X 
     lda SCREEN2ASCII,x                            // fetch the Petsci code from the array, with x as index
                                                   // now the accumulator contains the Petsci code
-    ldx $ff
-    sta PRINTERBUFFER,x
-    iny
-    inx
+    ldx $ff                                       // restore x
+    sta PRINTERBUFFER,x                           // store the value from the accumulator into the printbuffer
+    iny                                           // with x as index
+    inx                                           // increase both x and y
     cpx #78                                       // insert newlines before we reach 80 characters
-    beq !newline+
+    beq !newline+                                 // 
     cpx #156                                      // insert newline before we reach the end of the second line
-    beq !newline+
-    jmp !readbuffer-
-!newline:              
-    lda #10
-    sta PRINTERBUFFER,x
-    inx 
-    jmp !readbuffer-
-!skip:    
-    iny
-    jmp !readbuffer-
-!exit:
-    lda #10
-    sta PRINTERBUFFER,x
-    inx
-    lda #0
-    sta PRINTERBUFFER,x
-rts    
+    beq !newline+                                 //
+    jmp !readbuffer-                              // jump to the start of the loop and read the next byte from RXBUFFER
+!newline:                                         // 
+    lda #10                                       // load the value for newline (10)
+    sta PRINTERBUFFER,x                           // store it in the printbuffer
+    inx                                           // and increase x
+    jmp !readbuffer-                              // jump to the start of the loop and read the next byte from RXBUFFER
+!skip:                                            // 
+    iny                                           // just increase y to skip a byte in the RXBUFFER
+    jmp !readbuffer-                              // jump to the start of the loop and read the next byte from RXBUFFER
+!exit:                                            //
+    lda #10                                       //
+    sta PRINTERBUFFER,x                           // add a line feed (10) to the end of the buffer
+    inx                                           //
+    lda #0                                        // terminate the buffer with null
+    sta PRINTERBUFFER,x                           //
+rts                                               //
 //=========================================================================================================
 // SUBROUTINE FOR PRINTING 
-// $fb $fc
 //========================================================================================================= 
-!printTextK:
-    lda PRINTIT
-    cmp #1
-    beq !+
-    rts
-!:
-    lda #4
-    ldx #4
-    ldy #7
-    sty PRINTIT
-    jsr $ffba  
-    jsr $ffc0
-    ldx #4
-    jsr $ffc9
-    
-    lda #<PRINTERBUFFER
-    ldy #>PRINTERBUFFER
-    jsr $ab1e
-!:    
-    // close
-    lda #4
-    jsr $ffc3
-    jsr $ffcc
-rts
-
+!printTextK:                                      //
+    lda PRINTIT                                   //
+    cmp #1                                        //
+    beq !+                                        //
+    rts                                           //
+!:                                                //
+    lda #4                                        // open a logical file (called 4) on device 4
+    ldx #4                                        // A = Logical number; X = Device number; Y = Secondary address.
+    ldy #7                                        // printer should expect lower and upper case letters
+    sty PRINTIT                                   // reset PRINTIT to not 1
+    jsr $ffba                                     // SETLFS. Set file parameters.
+    jsr $ffc0                                     // OPEN. Open file.
+    ldx #4                                        // 
+    jsr $ffc9                                     // CHKOUT. Define file 4 as default output
+                                                  //
+    lda #<PRINTERBUFFER                           // low byte of printbuffer's address goes into A
+    ldy #>PRINTERBUFFER                           // high byte of printbuffer's address goes into Y
+    jsr $ab1e                                     // use a basic routine to print a null terminated string
+!:                                                //
+    lda #4                                        // close file 4
+    jsr $ffc3                                     // close file
+    jsr $ffcc                                     // restore default input/output to keyboard/screen.
+rts                                               //
+                                                  //
 //=========================================================================================================
 // SUB ROUTINE, DELAY
 //=========================================================================================================
@@ -2717,7 +2728,7 @@ text_menu_item_1:             .byte 147; .text "[ F1 ] Wifi Setup"; .byte 128
 text_menu_item_2:             .byte 147; .text "[ F2 ] Account Setup";.byte 128
 text_menu_item_3:             .byte 147; .text "[ F3 ] Output Selection";.byte 128
 text_menu_item_4:             .byte 147; .text "[ F4 ] Server Setup";.byte 128
-text_menu_item_6:             .byte 147; .text "[ F5 ] About Private Messaging";.byte 128
+text_menu_item_6:             .byte 147; .text "[ F5 ] Help";.byte 128
 text_menu_item_5:             .byte 147; .text "[ F6 ] About This Software";.byte 128
 text_version:                 .byte 151; .text "Version";.byte 128
 version:                      .byte 151; .text "3.76"; .byte 128
@@ -2733,11 +2744,11 @@ text_save_settings:           .byte 147; .text "[ F1 ] Save Settings"; .byte 128
 text_exit_menu:               .byte 147; .text "[ F7 ] Exit Menu"; .byte 128
 
 text_output_menu:             .byte 151; .text "OUTPUT SETUP  "; .byte 213,94,145
-text_status:				  .text "Output to printer Status:"; .byte 128                                                                                                                    
-text_enabled:				  .byte 213,15,158; .text "Enabled"; .byte 128                                                                                                                                         
-text_disabled:				  .byte 213,15,158; .text "Disabled"; .byte 128                                                                                                                                          
-text_output_enable:			  .byte 147; .text "[ F1 ] Enable Output"; .byte 128										
-text_output_disable:		  .byte 147; .text "[ F7 ] Disable Output"; .byte 128	
+text_status:          .text "Output to printer Status:"; .byte 128                                                                                                                    
+text_enabled:         .byte 213,15,158; .text "Enabled"; .byte 128                                                                                                                                         
+text_disabled:          .byte 213,15,158; .text "Disabled"; .byte 128                                                                                                                                          
+text_output_enable:       .byte 147; .text "[ F1 ] Enable Output"; .byte 128                    
+text_output_disable:      .byte 147; .text "[ F7 ] Disable Output"; .byte 128 
 
 text_about_menu:              .byte 151; .text "ABOUT CHAT64"; .byte 128
 text_about_line_1:            .byte 145; .text "Initially developed by Bart Venneker" ; .byte 213,4
@@ -2768,11 +2779,21 @@ text_help_private:            .byte 147; .text "To send a private message to som
                               .byte 146; .text "@username"; .byte 147; .text " at the start of your"; .byte 213,5
                                          .text "message."; .byte 213,72 
                                          .text "Use F5 to switch between the public"; .byte 213,5
-                                         .text "and private message screen."; .byte 213,53
-                                         .text "Try our A.I. Chat Bot Eliza!"; .byte 213,12
+                                         .text "and private message screen."; .byte 128
+                                         
+
+text_help_ai:                      .byte 151; .text "A.I. Chatbot Eliza"; .byte 128                                                 
+text_help_eliza:                   .byte 147; .text "Try our A.I. Chat Bot Eliza!"; .byte 213,12
                                          .text "Switch to private messaging and start"; .byte 213,3
-                                         .text "your message with @Eliza";.byte 128
-                                       
+                                         .text "your message with @Eliza"; .byte 213,56
+                                         .text "Eliza is a true A.I. chatbot that uses  natural language processing to create   humanlike dialogue"
+                                         .byte 213,62; .text "Try it! it's a lot of fun!";.byte 128                          
+text_any_key:                 .byte 151; .text "Press any key to continue"; .byte 128
+text_help_ul:                 .byte 151; .text "See who is online"; .byte 128
+text_help_userlist:           .byte 147; .text "Press F3 from the chat window to see    who is online."; .byte 213,66
+                                         .text "You will see a list of all users where  online users "
+                                         .text "are marked in green while  offline users are gray"; .byte 128                                  
+    
 message_start:                .byte 21,20,19,18,17,16,15 // lookup table
 
 text_time_offset:             .byte 145; .text "Time offset from GMT:"; .byte 128
@@ -2855,7 +2876,7 @@ SCREEN2ASCII:
 // VARIABLE BUFFERS
 //=========================================================================================================
 .segment Variables [start=$3000, max=$4fff, virtual]
-PRINTER_ENABLED_FLAG:		  .byte 0 			  // Output to printer flag
+PRINTER_ENABLED_FLAG:     .byte 0         // Output to printer flag
 PRINTERBUFFER:                .fill 165,0
 USER_LIST_FLAG:               .byte 0             // User list source flag   
 READLIMIT:                    .byte 0             // How many chars to read from screen (in configuration screens)
