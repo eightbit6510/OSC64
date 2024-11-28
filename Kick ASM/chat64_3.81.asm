@@ -838,6 +838,9 @@ jsr !splitRXbuffer+                               // copy the first element to S
 //  jsr !callstatus+                              // Call the sub routine to get config status and Servername
     jsr !display_F7_menuItem+                     // Display "[ F7 ] exit menu" on line 17, row 3                                                  // 
     displayText(SERVERNAME,4,9)                   // display the server name on screen
+    lda CONFIG_STATUS
+    cmp #2
+    beq !server_setup_2+
     jsr !wait_for_ready_to_receive+               // Prepare the ESP to receive
     lda #238                                      // Load 238 into accumulator
     sta $de00                                     // Send the start byte (238 = test chatserver connectivity)
