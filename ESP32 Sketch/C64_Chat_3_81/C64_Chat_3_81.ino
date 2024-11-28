@@ -17,7 +17,7 @@ bool invert_nmi_signal = false;     // READ THIS:  If this settings is wrong, th
                                     // set 'true' for pcb rev 3.7, 
                                     // set 'false' for rev 3.8
 
-//#define OTA_VERSION
+#define OTA_VERSION
 
 #ifdef VICE_MODE
 bool accept_serial_command = true;
@@ -676,7 +676,8 @@ void loop() {
             wificonnected = 1;
             digitalWrite(CLED, HIGH);
             sendByte(149);
-            String wifi_status = "Connected with ip " + myLocalIp;
+            String wifi_status = "Connected with WiFi!";
+            if (myLocalIp != "0.0.0.0") wifi_status = "Connected with ip " + myLocalIp;
             send_String_to_c64(wifi_status);
             
           }
