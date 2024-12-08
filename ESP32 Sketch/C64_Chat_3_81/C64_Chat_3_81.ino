@@ -438,6 +438,7 @@ void loop() {
           // start byte 254 = C64 triggers call to the website for new public message
           // ------------------------------------------------------------------------------
           if (first_check ==0) first_check=millis();
+          pastMatrix=true;
           // send urgent messages first
           doUrgentMessage(); 
           // if the user list is empty, get the list
