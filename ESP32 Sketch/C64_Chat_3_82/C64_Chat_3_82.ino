@@ -673,6 +673,7 @@ void loop() {
             digitalWrite(CLED, LOW);
             sendByte(146);
             send_String_to_c64("Not Connected to Wifi");
+            Serial.println("Not Connected to Wifi");
           } else {
             wificonnected = 1;
             digitalWrite(CLED, HIGH);
@@ -936,6 +937,10 @@ void loop() {
           // start byte 237 = C64 triggers call to receive connection status
           // ------------------------------------------------------------------------------
           sendByte(ResultColor);  // send color code for green if connected
+#ifdef debug
+          Serial.print("237 = ");
+          Serial.println(int(ResultColor));
+#endif
           send_String_to_c64(ServerConnectResult);
           break;
         }
@@ -979,7 +984,7 @@ void loop() {
           userpageCount = 0;
           String ul1 = userPages[userpageCount];
           send_String_to_c64(ul1);
-          Serial.println(ul1);
+          //Serial.println(ul1);
           userpageCount++;
           break;
         }
@@ -1133,9 +1138,12 @@ void send_out_buffer_to_C64() {
   // send the content of the outbuffer to the C64
   for (int x = 0; x < outbuffersize - 1; x++) {
     sendByte(Ascii_to_screenCode(outbuffer[x]));
+    //Serial.print(int(outbuffer[x]));
+    //Serial.print(" ");
   }
   // all done, send end byte
   sendByte(128);
+  //Serial.println("128");
   outbuffersize = 0;
 }
 
