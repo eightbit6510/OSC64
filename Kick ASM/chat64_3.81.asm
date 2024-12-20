@@ -736,7 +736,7 @@ jsr !splitRXbuffer+                               // copy the first element to S
     jmp !account_setup-                           // No, second thoughts, go back to config screen.
                                                   // 
 !reset_for_real:                                  // 
-                                                  // 
+    jsr !delay+                                   // 
     jsr !wait_for_ready_to_receive+               // User has selected and confirmed 'reset to factory defaults' function
     lda #244                                      // Load 244 in accumulator
     sta $de00                                     // Send the start byte 244 (244 = reset to factory defaults)
@@ -751,8 +751,11 @@ jsr !splitRXbuffer+                               // copy the first element to S
     jmp !sendconfirmation-                        //
                                                   //
                                                   // 
-!loop_forever:                                    // 
-    jmp !loop_forever-                            // Loop forever and wait for the ESP32 to reset the C64
+!loop_forever:                                    //                              
+    jsr !delay+                                   //           
+    jsr !delay+                                   //
+    jsr !delay+                                   //
+    jmp !reset_for_real-                            // Loop forever and wait for the ESP32 to reset the C64
                                                   // 
 //=========================================================================================================
 //    SUB ROUTINE TO SPLIT RXBUFFER
