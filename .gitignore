@@ -7,3 +7,4 @@ Kick ASM/cartridge.crt
 *.sym
 Kick ASM/asminfo.txt
 /ESP32 Sketch/C64_Chat_3_78/build
+/ESP32 Sketch/C64_Chat_3_82/build
