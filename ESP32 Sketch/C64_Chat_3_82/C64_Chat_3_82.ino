@@ -7,16 +7,14 @@
 #include "prgfile.h"
 Preferences settings;
 
-bool invert_reset_signal = false ;  // READ THIS:  If this settings is wrong, the program will never start because reset is hold down constant.
+//bool invert_reset_signal = false ;  // READ THIS:  If this settings is wrong, the program will never start because reset is hold down constant.
                                     // set 'true' for pcb rev 2.0   
                                     // set 'false' for pcb rev 3.7 
                                     // set 'false' for pcb rev 3.8
-
-bool invert_nmi_signal = false;     // READ THIS:  If this settings is wrong, things might work but auto update will fail.
+//bool invert_nmi_signal = false;     // READ THIS:  If this settings is wrong, things might work but auto update will fail.
                                     // set 'false' for pcb rev 2.0  
                                     // set 'true' for pcb rev 3.7, 
                                     // set 'false' for rev 3.8
-
 //#define OTA_VERSION
 
 #ifdef VICE_MODE
@@ -33,13 +31,14 @@ bool accept_serial_command = true;
 // ********************************
 // **     Global Variables       **
 // ********************************
-
+bool invert_reset_signal;
+bool invert_nmi_signal ;
 String urgentMessage = "";
 int wificonnected = -1;
 char regStatus = 'u';
 volatile bool dataFromC64 = false;
 volatile bool io2 = false;
-char inbuffer[250];  // a character buffer for incomming data
+char inbuffer[250];   // a character buffer for incomming data
 int inbuffersize = 0;
 char outbuffer[250];  // a character buffer for outgoing data
 int outbuffersize = 0;
@@ -90,7 +89,6 @@ WiFiResponseMessage responseMessage;
 // Interrupt routine for IO1
 // *************************************************
 void IRAM_ATTR isr_io1() {
-
   // This signal goes LOW when the commodore writes to (or reads from) the IO1 address space
   // In our case the Commodore 64 only WRITES the IO1 address space, so ESP32 can read the data.
   digitalWrite(oC64D7, LOW);  // this pin is used for flow controll,
@@ -123,7 +121,6 @@ void reboot() {
 #ifdef VICE_MODE
   send_serial_reboot();
 #endif
-
   ESP.restart();
 }
 
@@ -141,7 +138,6 @@ void receive_serial_command() {
       } else if (buf == 'J') {
         io2 = true;
       }
-
       receiving_command = false;
     }
   }
@@ -246,14 +242,22 @@ void setup() {
   ssid = settings.getString("ssid", "empty");  // get WiFi credentials and Chatserver ip/fqdn from eeprom
   password = settings.getString("password", "empty");
   timeoffset = settings.getString("timeoffset", "+0");  // get the time offset from the eeprom
+  
+  
+  if (settings.isKey("invRST")) // if this key exists, use it
+    invert_reset_signal = settings.getInt("invRST");
+  else { // key does not exist, so create it
+    invert_reset_signal = false;
+    settings.putInt("invRST",0);
+  }
 
-#ifndef OTA_VERSION
-  settings.putInt("invRST",(int)invert_reset_signal);   
-  settings.putInt("invNMI",(int)invert_nmi_signal);    
-#else
-  bool invert_nmi_signal = settings.getInt("invNMI");
-  bool invert_reset_signal = settings.getInt("invRST");
-#endif
+  if (settings.isKey("invNMI")) // if this key exists, use it
+    invert_nmi_signal = settings.getInt("invNMI",0);
+  else { // key does not exist, so create it
+    invert_nmi_signal = false;
+    settings.putInt("invNMI",0);    
+  }
+   
   settings.end();
 
   // define inputs
@@ -854,7 +858,7 @@ void loop() {
         {
           // ------------------------------------------------------------------------------
           // start byte 242 = C64 ask for the sender of the last private message
-          // ------------------------------------------------------------------------------
+          // ------------------------------------------------------------------------------          
           send_String_to_c64(pmSender);
           break;
         }

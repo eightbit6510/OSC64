@@ -126,8 +126,8 @@ rts
     ldx #0                                        // get ready to draw the line, x is our index
     stx SCREEN_ID                                 // also store zero in the screen id
 !chat_screen:                                     // Draw the divider line
-    lda #0
-    sta MENU_ID
+    lda #0                                        //
+    sta MENU_ID                                   //
     lda #12                                       // color number 12 is gray
     sta $9c                                       // store the color code in $c9
     lda #21                                       // a line on screen line 21
@@ -151,7 +151,6 @@ rts
     jsr !text_input+                              // jump to the text input routine. We return from this routine when the users presses enter on the last input line     
                                                   // at this point we have returned from the text_input routine and we must send the typed message to the esp32
                                                   // so lets read the message fom screen, including the color information 
-    //lda #$01; sta $cc                           // Hide the cursor
     lda SCREEN_ID                                 // check the screen id
     cmp #3                                        // if we are in private messaging (id = 3)
     beq !private_message+                         // then we can skip to label "private_message"
@@ -221,7 +220,23 @@ rts
     inx                                           // increase the index for reading the screen and color RAM
     cpx MESSAGELEN                                // if x reaches the message lengt value, we are at the end of message,
     bne !loop-                                    // continue to loop while x < message length
-                                                  // 
+
+!store_pm_user:                                   // store the PM_user 
+    lda SCREEN_ID                                 // but only if we are on screen 3 (the private screen)
+    cmp #3                                        // 3 means the private screen
+    bne !send+                                    // if we are on any other screen, just send the message
+    ldx #0
+!loop:    
+    lda $770,x    
+    sta text_pmuser,x
+    cmp #32
+    beq !+
+    inx
+    jmp !loop-
+!:  inx
+    lda #128 
+    sta text_pmuser,x
+    
 !send:                                            // 
     lda COLOR                                     // Convert the last used color into a petsci color code                                        
     and #15                                       // that color could be a high number, reduce it to a 4 bit number so we get 0-15                                      
@@ -1596,14 +1611,24 @@ rts
     lda #0                                        //
     rts                                           //
 //=========================================================================================================
-!show_eliza:
-  rts
-  lda SCREEN_ID
-  cmp #3
-  bne !exit+
-  displayText(text_eliza,22,0)
-  lda #7 
-  sta $d3
+!show_eliza:                                      //
+  lda SCREEN_ID                                   //
+  cmp #3                                          //
+  bne !exit+                                      //
+  ldx #0                                          //
+  stx $d3                                         //
+!read_pm_user:                                    // 
+  lda text_pmuser,x                               //  
+  cmp #128                                        //
+  beq !exit+                                      //
+  sta $0770,x                                     //
+  lda #1                                          //
+  sta $db70,x                                     // color the text white
+  inx                                             //
+  inc $d3                                         // move the cursor
+  jmp !read_pm_user-                              //
+   
+
 !exit:
   rts
 //=========================================================================================================
@@ -1781,7 +1806,6 @@ rts
     jsr !printTextK+                              //
 !:  lda #0                                        // 
     sta OFFSET                                    // reset the offset buffer.
-    jsr !ask_last_pm_sender+                      // 
                                                   // 
 !exit:                                            // 
                                                   // 
@@ -1892,53 +1916,7 @@ rts
     sta DELAY                                     // 
     jsr !delay+                                   //     
     rts
-//=========================================================================================================
-// SUB ROUTINE, ASK FOR THE Nickname of the last PRIVATE MESSAGES
-//=========================================================================================================
-!ask_last_pm_sender:                              // 
-    lda VICEMODE                                  // if we are running in simulation mode
-    cmp #1                                        // jump to exit without interacting with ESP32
-    beq !exit+                                    // yes? Exit the matrix
-                                                  // 
-                                                  // if the user is already typing a message, do
-                                                  // not fill in the last user automatically, that is very anoying.
-    lda $d3                                       // where is the cursor?
-    cmp #0                                        // if the cursor is NOT on column zero,
-    bne !exit+                                    // skip this routine and proceed to exit.
-    lda SCREEN_ID                                 // Load our screen ID
-    cmp #3                                        // Are we in the private chat screen?
-    bne !exit+                                    // if no, exit routine
-    lda #$01; sta $cc                             // Hide the cursor
-    lda #242                                      // 242 if the command to ask for the last pmuser
-    sta CMD                                       // 
-    jsr !send_start_byte_ff+                      // 
-    ldx #0                                        // 
-!loop:                                            // 
-    lda RXBUFFER,x                                // 
-    cmp #128                                      // 
-    beq !endloop+                                 // 
-    sta $770,x                                    // 
-    lda #1                                        //
-    sta $db70,x                                   //
-    inx                                           // 
-    lda #32                                       // 
-    sta $770,x                                    // 
-    jmp !loop-                                    // 
-!endloop:                                         // 
-    cpx #0                                        // 
-    beq !exit+                                    // 
-                                                  // put the cursor at the end of the @username
-    clc                                           // Clear carry so we can SET the cursor position
-    txa                                           // transfer x to a
-    tay                                           // tranfer a to y
-    iny                                           // 
-    ldx #22                                       // Select row
-    jsr $fff0                                     // Kernal routine to set cursor on x,y
-                                                  // 
-!exit:                                            // 
-    lda #$00; sta $cc                             // Show the cursor
-    rts                                           // 
-                                                  // 
+
 //=========================================================================================================
 // SUB ROUTINE, ASK FOR THE NUMBER OF UNREAD PRIVATE MESSAGES
 //=========================================================================================================
@@ -2936,7 +2914,7 @@ text_menu_item_6:             .byte 147; .text "[ F5 ] Help";.byte 128
 text_menu_item_5:             .byte 147; .text "[ F6 ] About This Software";.byte 128
 text_menu_item_8:       .byte 147; .text "[ F8 ] Output Setup";.byte 128
 text_version:                 .byte 151; .text "Version";.byte 128
-version:                      .byte 151; .text "3.78"; .byte 128
+version:                      .byte 151; .text "3.79"; .byte 128
 versionmask:                  .byte 151; .text "ROM x.xx ESP x.xx"; .byte 128
 version_date:                 .byte 151; .text "12/2024";.byte 128
 text_wifi_menu:               .byte 151; .text "WIFI SETUP"; .byte 128
@@ -3039,7 +3017,7 @@ big_letters: .byte 158,85,69,69,73,93,32,32,93,85,69,69,73,67,114,67,32,85,69,69
              
 text_error_unknow_pmuser:     .byte 146; .text "Error: unknown user:  "; .byte 128
 text_rxerror:                 .byte 143,146; .text"system: Error: received garbage";.byte 128
-text_eliza:                   .byte 145; .text "@Eliza "; .byte 128  
+text_pmuser:                  .text "@Eliza "; .byte 128,128,128,128,128,128 ,128 
 // data for stars on the start screen (these are memory addresses in the color RAM)
 stars1:                       .word 55380,55391,55398,55410,55420,55430,55432,55462,55471,55481,56173,56188,56076,56099,56131,56170,56172,56189,56211,0,0// color memory addressed for the stars, color $07
 stars2:                       .word 55381,55392,55390,55397,55399,55409,55411,55422,55425,55482,55502,55511,55521,55480,55463,55470,55340,55351,55358,55370,55379,55429,55433,55438,55461,55450,55441,55472,56075,56077,56098,56091,56100,56116,56130,56132,56139,56149,56169,56190,56210,56212,56229,56251,56036,56059,0,0// color memory addressed for the stars, color $08

@@ -1,9 +1,9 @@
 #ifndef COMMON_H_
 #define COMMON_H_
 #include "Arduino.h"
-#define uromVersion "3.78"
-#define SwVersion "3.82"
-#define debug
+#define uromVersion "3.79"
+#define SwVersion "3.83"
+//#define debug
 
 // Uncomment to enable VICE support
 // #define VICE_MODE
