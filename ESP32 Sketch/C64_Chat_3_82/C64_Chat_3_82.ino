@@ -15,8 +15,6 @@ Preferences settings;
                                     // set 'false' for pcb rev 2.0  
                                     // set 'true' for pcb rev 3.7, 
                                     // set 'false' for rev 3.8
-//#define OTA_VERSION
-
 #ifdef VICE_MODE
 bool accept_serial_command = true;
 #endif
@@ -54,7 +52,6 @@ char multiMessageBufferPriv[3500];
 unsigned long first_check=0;
 WiFiCommandMessage commandMessage;
 WiFiResponseMessage responseMessage;
-
 
 // ********************************
 // **        OUTPUTS             **
@@ -235,6 +232,11 @@ void setup() {
 
   // get the last known message id (only the private is stored in eeprom)
   lastprivmsg = settings.getULong("lastprivmsg", 1);
+
+  // get the last known system message id
+  lastSysMessage=settings.getULong("lastsysmsg", 1);
+//  lastSysMessage=0; // this is for testing, delete this line!
+   
 
   // get Chatserver ip/fqdn from eeprom
   server = settings.getString("server", "www.chat64.nl");
@@ -421,7 +423,7 @@ void loop() {
     // 245 = check if the esp is connected at all, or are we running in simulation mode?
     // 244 = reset to factory defaults
     // 243 = C64 ask for the mac address, registration id, nickname and regstatus
-    // 242 = get senders nickname of last private message.
+    // 242 = do update
     // 241 = get the number of unread private messages
     // 240 = C64 sends the new registration id and nickname to ESP32
     // 239 = C64 asks if updated firmware is available
@@ -431,7 +433,8 @@ void loop() {
     // 235 = C64 sends server configuration status
     // 234 = get user list first page
     // 233 = get user list next page
-    // 232 = do update
+    // 232 = check for admin message
+    // 231 = receive admin messages
     // 228 = debug purposes
     // 128 = end marker, ignore
 
@@ -441,6 +444,7 @@ void loop() {
           // ------------------------------------------------------------------------------
           // start byte 254 = C64 triggers call to the website for new public message
           // ------------------------------------------------------------------------------
+ 
           if (first_check ==0) first_check=millis();
           pastMatrix=true;
           // send urgent messages first
@@ -463,8 +467,7 @@ void loop() {
           // fill buffer until we find '}'
           if (cc == '{') {
             msgbuffer[0] = cc;
-            found = true;
-            getMessage = false;
+            found = true;            
             p = 1;
             while (cc != '}') {
               cc = multiMessageBufferPub[pos0++];
@@ -473,6 +476,7 @@ void loop() {
             }
           }
           if (found) {
+            getMessage = false;
             found = false;
             Deserialize();
           } else {
@@ -855,11 +859,18 @@ void loop() {
           break;
         }
       case 242:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 242 = C64 ask for the sender of the last private message
-          // ------------------------------------------------------------------------------          
-          send_String_to_c64(pmSender);
+        { // do the update!   
+          receive_buffer_from_C64(1);
+          char bns[inbuffersize + 1];
+          strncpy(bns, inbuffer, inbuffersize + 1);
+          String ns = bns;
+          if (ns.startsWith("UPDATE!")) {   
+            outByte(1);    
+            detachInterrupt(C64IO1); // disable IO1 and IO2 interrupts
+            detachInterrupt(C64IO2); // disable IO1 and IO2 interrupts 
+            commandMessage.command = DoUpdateCommand;
+            xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);            
+          }
           break;
         }
       case 241:
@@ -1002,20 +1013,32 @@ void loop() {
           break;
         }
       case 232:
-        { // do the update!   
-          receive_buffer_from_C64(1);
-          char bns[inbuffersize + 1];
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-          if (ns.startsWith("UPDATE!")) {   
-            outByte(1);    
-            detachInterrupt(C64IO1); // disable IO1 and IO2 interrupts
-            detachInterrupt(C64IO2); // disable IO1 and IO2 interrupts 
-            commandMessage.command = DoUpdateCommand;
-            xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);            
+        {
+          // ------------------------------------------------------------------------------
+          // Check if there are admin messages and fetch the newest admin message
+          // ------------------------------------------------------------------------------                    
+          if (gotAdminMessage==1){             
+            sendByte(1);
+            sendByte(128);          
+          } else {                  
+            sendByte(128);
           }
           break;
         }
+      case 231:{ 
+        // ------------------------------------------------------------------------------
+        // Send the admin message.
+        // ------------------------------------------------------------------------------ 
+        int x=0;
+        while(1) {
+            delay(1);
+            if (adminMessage[x]==128) break;
+            sendByte(adminMessage[x++]);            
+            }  
+        sendByte(128);
+        gotAdminMessage=0;  
+        break;
+      }  
       case 228:
         {
           // ------------------------------------------------------------------------------

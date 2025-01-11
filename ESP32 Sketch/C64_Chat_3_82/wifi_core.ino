@@ -7,7 +7,9 @@
 #include "common.h"
 #include "utils.h"
 #include "wifi_core.h"
-
+int gotAdminMessage = 0;
+volatile unsigned long lastSysMessage = 0;
+char adminMessage[620];
 String regID = "";       // String variale for your regID (leave it empty!)
 String macaddress = "";  // variable for the mac address (leave it empty!)
 String myNickName = "";  // variable for your nickname (leave it empty!)
@@ -43,6 +45,39 @@ MessageBufferHandle_t responseBuffer;
 bool isWifiCoreConnected = false;
 int lastp = 0;
 String configured = "empty";  // do not change this!
+unsigned long versionsCheck = 10000;
+// ***************************************************************
+//   read admin messages (if any)
+// ***************************************************************
+void get_admin_message(){
+  if (gotAdminMessage==1) return;
+  String serverName = "http://" + server + "/readAdminMessage.php";
+  String h;
+  WiFiClient client;
+  HTTPClient http;
+  http.begin(client, serverName);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+  String httpRequestData = "regid=" + regID + "&line=1&last=" + lastSysMessage;
+  int httpResponseCode = http.POST(httpRequestData);
+  if (httpResponseCode == 200) {
+    h = http.getString();
+    h.trim();
+    String lm = getValue(h,'~', 0);
+    if (lm=="0") {
+      gotAdminMessage=0;
+      return;
+      }
+    lm = getValue(h,'~', 1);
+    lastSysMessage = lm.toInt();
+    settings.begin("mysettings", false);  // store the last system message id in the esp's eeprom
+    settings.putULong("lastsysmsg", lastSysMessage);  
+    settings.end();
+    gotAdminMessage=1;
+    h = getValue(h,'~', 2) ;
+    h.toCharArray(adminMessage,h.length()+1);
+    adminMessage[h.length()]=char(128);
+  }
+}
 // ***************************************************************
 //   get the list of users from the webserver
 // ***************************************************************
@@ -52,7 +87,6 @@ void fill_userlist() {
   WiFiClient client;
   HTTPClient http;
   http.begin(client, serverName);
-  // Specify content-type header
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
 
   // Prepare your HTTP POST request data
@@ -386,10 +420,13 @@ void WifiCoreLoop(void* parameter) {
       heartbeat = millis();  // readAllMessages also updates the 'last seen' timestamp, so no need for a heartbeat for the next 25 seconds.
     }
     // Free resources
-
     httpb.end();
     client.stop();  // without this, we have a small memory leak
-    newVersions = UpdateAvailable();
+    if (millis() > versionsCheck){
+      newVersions = UpdateAvailable();
+      get_admin_message();
+      versionsCheck=millis() + 33333;
+    }
   }
 }
 
@@ -404,6 +441,7 @@ void softReset() {
 }
 
 String UpdateAvailable(){
+  
   Serial.println("*****************  CHECK UPDATES");
   String serverName = "http://" + server + "/checkUpdateForC64.php";
   

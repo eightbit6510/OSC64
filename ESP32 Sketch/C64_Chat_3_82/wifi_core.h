@@ -7,7 +7,9 @@
 
 
 // shared variables between wifi core and app core
-
+extern int gotAdminMessage; 
+extern volatile unsigned long lastSysMessage;
+extern char adminMessage[620];
 extern String regID;               // String variale for your regID (leave it empty!)
 extern String macaddress;          // variable for the mac address (leave it empty!)
 extern String myNickName;          // variable for your nickname (leave it empty!)
