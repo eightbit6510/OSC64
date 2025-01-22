@@ -2,6 +2,9 @@
 
 **The Chat Cartridge for the Commodore64.**
 
+Website: https://chat64.nl/
+Facebook: https://www.facebook.com/groups/chat64
+
 A few years ago Bart had the idea to build a chat application for the Commodore 64.
 After some revisions and hardware alterations a few cartridges were developed and spread amongst a small group of users. For a while nothing happened, also because of a server crash. Until Theo, who was one of the early testers of the project, reached out to Bart. Bart & Theo redesigned the hard- and software and rebuilt the webserver 
 
