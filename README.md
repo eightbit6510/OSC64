@@ -23,6 +23,5 @@ If you like our project and want to make a donation, please feel free to do so b
 
 By Bart Venneker and Theo van den Beld
 
-More info will appear soon!
 
 22-02-2024
