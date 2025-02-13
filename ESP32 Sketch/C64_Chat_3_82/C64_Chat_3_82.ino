@@ -235,7 +235,7 @@ void setup() {
 
   // get the last known system message id
   lastSysMessage=settings.getULong("lastsysmsg", 1);
-//  lastSysMessage=0; // this is for testing, delete this line!
+  lastSysMessage=0; // this is for testing, delete this line!
    
 
   // get Chatserver ip/fqdn from eeprom
@@ -1017,6 +1017,7 @@ void loop() {
           // ------------------------------------------------------------------------------
           // Check if there are admin messages and fetch the newest admin message
           // ------------------------------------------------------------------------------                    
+          Serial.println("check admin message ; 232");
           if (gotAdminMessage==1){             
             sendByte(1);
             sendByte(128);          

@@ -1230,15 +1230,15 @@ jsr !start_menu_screen-                           //
     cmp #80                                       // 'p' key pressed?
     beq !prevpage+                                // if so, go to previous page
     cmp #82                                       // E pressed?
-    bne !+                      // No, check next 
-    lda #0                      // Yes, clear flag  
-    sta USER_LIST_FLAG                //  
+    bne !+                                        // No, check next 
+    lda #0                                        // Yes, clear flag  
+    sta USER_LIST_FLAG                            //  
     jmp !return_to_chat+                          // Return to chat window
 !:  cmp #136                                      // F7 key pressed?
-    bne !+                      // No, back to key input  
+    bne !+                                        // No, back to key input  
     lda USER_LIST_FLAG                            // Yes, check were we came from
-    cmp #1                      // Did we come from the chat window?  
-    beq !+                      // Yes, Ignore F7 
+    cmp #1                                        // Did we come from the chat window?  
+    beq !+                                        // Yes, Ignore F7 
     jmp !exit_menu+                               // No, exit to main menu
 !:  jmp !keyinput-                                // Ignore all other keys and wait for user input again
                                                   // 
@@ -1443,6 +1443,9 @@ rts
 !:  cmp #139                                      // F6 key pressed? (is used in menu 2 - account setup)
     bne !+                                        // No, try the next possible match
     jmp !exit_F6+                                 // Yes, jump to exit F6
+!:  cmp #140                                      //
+    bne !+                                        //
+    jmp !exit_F8+                                 //
 !:  cmp #19                                       // Home key pressed?
     beq !home-                                    // Yes, jump to !home
     cmp #147                                      // Clear home key pressed?
@@ -1592,7 +1595,15 @@ rts
     bne !+                                        // 
     jmp !reset_factory-                           // 
 !:  jmp !exit-                                    //                                               
-                                                  //
+
+!exit_F8:                                         //
+    lda MENU_ID
+    cmp #0
+    beq !+
+    jmp !exit-                                  //
+!:  jsr !admin_screen2+      
+    jmp !exit-
+    
 !preventGraphChars:                               //
     cmp #175                                      // allow underscore, move to the exit
     beq !exit+                                    //
@@ -2966,22 +2977,23 @@ update_nmi:                                       // While the updates runs, we 
 //=========================================================================================================                                                  
 // this is a special screen with a message from the system admin
 // regid and recipient = 666666cacacacaffff (system user regid)
-!admin_screen:                                    //
-!:  lda #232                                      // Load 242 in accumulator (check for admin messages)
+!admin_screen:                                    //  
+  rts
+!:  lda #232                                      // Load 232 in accumulator (check for admin messages)
     sta CMD                                       // Store that in CMD
-    jsr !send_start_byte_ff-                      // Call the sub routine to obtain connection status from esp32
-    lda RXBUFFER                                  //
-    cmp #1                                        //
+    jsr !send_start_byte_ff-                      // receive the admin message (if any)
+    lda RXBUFFER                                  // load first byte of rxbuffer
+    cmp #1                                        // if it equals 1, we have a message.
     beq !+                                        //
-    rts                                           //
-                                                  //
-!:  jsr !screen_backup-                           //
+    rts                                           // if not, return
+!admin_screen2:                                   // 
+!:  jsr !screen_backup-                           // at this point, we should have a message waiting for us.
     jsr $E544                                     // clear screen
     jsr !start_menu_screen-                       //
     displayText(text_sys_message,1,12)            //
     lda #22 ; sta $fb                             // Load 23 into accumulator and store it in zero page address $fb
     jsr !draw_menu_line-                          // Call the draw_menu_line sub routine to draw a line on row 23
-    displayText(text_f7_exit,23,13)               //
+    displayText(text_list_menu,23,0)              //
                                                   //
     clc                                           // Clear carry so we can SET the cursor position
     ldx #5                                        // Select row
@@ -3009,10 +3021,17 @@ update_nmi:                                       // While the updates runs, we 
     lda #>(nmi)                                   //  / And replace the old vector to our own nmi routine
     sta $0319                                     // /  
                                                   //
-!ready_key:                                       //
+!read_key:                                        //
   jsr $ffe4                                       //
   cmp #136                                        //
-  bne !ready_key-                                 // 
+  beq !exit+                                      //
+  cmp #78                                         // 'n' key pressed?
+  beq !nextAdminMessage+                          // If true, go to the next message
+  cmp #80                                         // 'p' key pressed?
+  beq !prevAdminMessage+                          // if so, go to previous message
+  jmp !read_key-                                  // 
+!nextAdminMessage:
+!prevAdminMessage:
 !exit:                                            //
   jsr !screen_restore-                            //
   rts                                             //

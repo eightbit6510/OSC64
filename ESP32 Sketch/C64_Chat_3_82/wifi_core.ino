@@ -51,7 +51,7 @@ unsigned long versionsCheck = 10000;
 // ***************************************************************
 void get_admin_message(){
   if (gotAdminMessage==1) return;
-  String serverName = "http://" + server + "/readAdminMessage.php";
+  String serverName = "http://" + server + "/readAdminMessages.php";
   String h;
   WiFiClient client;
   HTTPClient http;
