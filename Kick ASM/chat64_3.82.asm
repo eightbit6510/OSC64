@@ -16,7 +16,10 @@
 .const _BUFFER_POINTER_ = $fb
 .const _FIELD_ = $fb
 .const _NOTE_ = $fb
-
+.const _SCREENLINE_ = $f7
+.const _SCREENCOLM_ = $f8
+.const _SCREENADRR_ = $43
+.const _TEMPADRR_   = $fe
 .const _IO1_ = $de00
 .const _IO2_ = $df00
 //=========================================================================================================
@@ -44,6 +47,7 @@ main_init:                                        //
     sta $d021                                     // Set black border
     sta PRINTER_ENABLED_FLAG                      // Set printer output to off
     sta PRINTIT                                   //  
+    sta CONFIG_STATUS                             //
     lda #144                                      // Load petscii code for Black Cursor
     jsr $ffd2                                     // output black cursor to the screen
     ldx #24                                       // zero SID sound register (1)
@@ -63,26 +67,35 @@ main_init:                                        //
     jsr $E544                                     // Clear screen after start screen
     lda #23                                       // Load 23 into accumulator and use it to
     sta $D018                                     // Switch to LOWER CASE
-    lda CONFIG_STATUS                             // 
-    cmp #4                                        // Are we fully configured?
-    bne !mainmenu+                                // No, jump to main menu first
-    lda VICEMODE                                  //
-    cmp #1                                        //
-    bne !+                                        //
-    jsr !sounderror+                              // error sound because cartridge was not found!
                                                   //
+!check_config_status:                             //
+    lda CONFIG_STATUS                             // e(5),c(3),d(4)
+    cmp #4                                        // a valid value for CONFIG_STATUS = 5,4,3
+    beq !+                                        // any other value should result in
+    cmp #3                                        // jumping to redoMatrixCheck
+    beq !mainmenu+                                //
+    cmp #5                                        //
+    beq !mainmenu+                                //
+    lda #100                                      //
+    sta DELAY                                     //
+    jsr !delay+                                   //
+    jmp !redoMatrixCheck+                         //
 !:  jmp !main_chat_screen+                        // 
                                                   // 
 !mainmenu:                                        //     
     jmp !mainmenu+                                // 
-                                                  // 
+!redoMatrixCheck:                                 // 
+    jsr !are_we_in_the_matrix+                    //
+    jsr !callstatus+                              //
+    jmp !check_config_status-                     //
+                                                  //
 //=========================================================================================================
 //  Vice Simulation check
 //=========================================================================================================
 !are_we_in_the_matrix:                            // 
-                                                  // this is to check if a real cartridge is attached
-                                                  // or if we are running in the Vice simulator
-                                                  // 
+    lda #100                                      // this is to check if a real cartridge is attached
+    sta DELAY                                     // or if we are running in the Vice simulator
+    jsr !delay+                                   // 
     jsr !wait_for_ready_to_receive+               // 
     lda #245                                      // Load number #245 (to check if the esp32 is connected)
     sta _IO1_                                     // write the byte to IO1
@@ -115,12 +128,16 @@ main_init:                                        //
     jsr !delay+                                   // and call the delay subroutine
     rts                                           // 
 
+//=========================================================================================================
+//    HIDE AND SHOW CURSOR ROUTINES
+//=========================================================================================================
 !hide_cursor:
     lda #$01; sta $cc                             // Hide the cursor
-    rts
+    rts                                           //
+ 
 !show_cursor:  
     lda #$00; sta $cc                             // show the cursor
-    rts
+    rts                                           //
 //=========================================================================================================
 //    PRIVATE CHAT SCREEN
 //=========================================================================================================
@@ -130,8 +147,7 @@ main_init:                                        //
     sta SCREEN_ID                                 // are in a private chat screen
     jsr !restore_pm_screen+                       //  
     jsr !toggleText+                              // SCREEN_ID | Screen    
-     
-    jsr !delay+
+    jsr !delay+                                   //
     jmp !chat_screen+                             // #0        | Main Chat Screen
                                                   // #3        | Private Chat Screen 
 !toggleText:                                      //           
@@ -185,8 +201,8 @@ rts
     lda $770                                      // if the message screen does not start with @,
     cmp #0                                        // then we raise an error "Don't send public msgs from priv. screen"
     beq !+                                        //
-    lda #1
-    sta SEND_ERROR
+    lda #1                                        //
+    sta SEND_ERROR                                //
     displayText(text_error_private_message,1,0)   // then display the errormessage
     jsr !sounderror+                              // play the error sound.
     jmp !ti-                                      // return to text input  
@@ -243,20 +259,20 @@ rts
     lda SCREEN_ID                                 // but only if we are on screen 3 (the private screen)
     cmp #3                                        // 3 means the private screen
     bne !send+                                    // if we are on any other screen, just send the message
-    ldx #0
-!loop:    
-    lda $770,x    
-    sta text_pmuser,x
-    cmp #32
-    beq !+
-    inx
-    jmp !loop-
-!:  inx
-    lda #128 
-    sta text_pmuser,x
-    
+    ldx #0                                        //
+!loop:                                            //
+    lda $770,x                                    //
+    sta text_pmuser,x                             //
+    cmp #32                                       //
+    beq !+                                        //
+    inx                                           //
+    jmp !loop-                                    //
+!:  inx                                           //
+    lda #128                                      //
+    sta text_pmuser,x                             //
+                                                  //
 !send:                                            // 
-    jsr !backup_message_lines+    
+    jsr !backup_message_lines+                    //
     lda COLOR                                     // Convert the last used color into a petsci color code                                        
     and #15                                       // that color could be a high number, reduce it to a 4 bit number so we get 0-15                                      
     tax                                           // transfer that number to x
@@ -334,24 +350,23 @@ rts
     sta $d40b                                     //
     lda #128                                      // set volume to NUL for all voices and MUTE voice 3
     sta $d418                                     //                                                                                             
-
-    rts
-    
-!playsongk: 
-   ldy #0
-!fetchnote:
-   lda (_NOTE_),y
-   cmp #255
-   beq !exit+
-   sta DELAY
-   iny
-   lda (_NOTE_),y
-   jsr !playnote-    
-   iny   
-   jmp !fetchnote-
-!exit:
-   rts
-
+    rts                                           //
+                                                  //
+!playsongk:                                       //
+   ldy #0                                         //
+!fetchnote:                                       //
+   lda (_NOTE_),y                                 //
+   cmp #255                                       //
+   beq !exit+                                     //
+   sta DELAY                                      //
+   iny                                            //
+   lda (_NOTE_),y                                 //
+   jsr !playnote-                                 //   
+   iny                                            //
+   jmp !fetchnote-                                //
+!exit:                                            //
+   rts                                            //
+                                                  //
 !sounderror:                                      // 
     lda #143                                      // set volume to max and mute voice 3
     sta $d418                                     // and store it here
@@ -382,7 +397,7 @@ rts
                                                   // 
 //=========================================================================================================
 !mainmenu:                                        //        
-    playsong(song4)
+    playsong(song4)                               //
     lda #1                                        //
     sta MENU_ID                                   //
     sta RETURNTOMENU                              //
@@ -410,7 +425,7 @@ rts
     jsr !display_F7_menuItem+                     // [F7] - Exit
     displayText(text_menu_item_8,19,3)            // [F8] - Output setup  
     displayText(text_menu_item_4,11,3)            // [F4] - Server Setup                                              // 
-!wifidone:
+!wifidone:                                        //
 !serverdone:                                      // 
                                                   // 
     displayText(text_menu_item_2,7,3)             // [F2] - Account setup
@@ -478,11 +493,11 @@ rts
     bne !F8+                                      // No, check for F8
     jmp !exit_menu+                               // Yes, exit menu
 !F8:cmp #140                                      // F8 key pressed?
-  bne !FX+                                        // No, next
+    bne !FX+                                      // No, next
     jsr !callstatus+                              // Yes, check the configuration status
     lda CONFIG_STATUS                             // 
     cmp #4                                        // F8 Allowed here?
-  bne !FX+                                        // Not yet, back to key input 
+    bne !FX+                                      // Not yet, back to key input 
     jmp !output_setup+                            // Jump to output device setup (If any)
 !FX:jmp !keyinput-                                // Ignore all other keys and wait for user input
                                                   // 
@@ -1474,10 +1489,30 @@ rts
 //    Function Clear message lines
 //=========================================================================================================   
 !clear_message_lines:
-   ldx #22 ; jsr $e9ff
-   ldx #23 ; jsr $e9ff
    ldx #24 ; jsr $e9ff
+   ldx #23 ; jsr $e9ff
+   ldx #22 ; jsr $e9ff
    rts
+
+//=========================================================================================================
+//    Check if our screen has not become corrupted
+//=========================================================================================================
+!hold_the_line:   
+   lda $748   
+   cmp #64
+   bne !+ 
+   rts
+   
+!:                                               // fix the screen
+   lda #12                                       // color number 12 is gray
+   sta _LINE_COLOR_                              // store the color code in $c9
+   lda #21                                       // a line on screen line 21
+   sta _LINE_POS_                                // 
+   
+   jsr !draw_menu_line+                          //
+   jsr !clear_message_lines-
+   rts
+   
 //=========================================================================================================
 //    Function for text input
 //=========================================================================================================
@@ -1542,6 +1577,9 @@ rts
 !:  cmp #134                                      // F3 key pressed?
     bne !+                                        // No, try the next possible match
     jmp !exit_F3+                                 // Yes, jump to exit F3
+!:  cmp #137
+    bne !+
+    jmp !exit_F2+
 !:  cmp #136                                      // F7 key pressed? (Is used to exit ANY menu)
     bne !+                                        // No, try the next possible match
     jmp !exit_F7+                                 // Yes, jump to exit F7
@@ -1704,14 +1742,19 @@ rts
     jmp !reset_factory-                           // 
 !:  jmp !ex-                                      //                                               
 
-!exit_F8:                                         //
+!exit_F8:                                          
     rts // NOT USED
-    lda MENU_ID
-    cmp #0
-    beq !+
+    lda MENU_ID                                   //
+    cmp #0                                        //
+    beq !+                                        //
     jmp !exit-                                    //
-!:  jsr !admin_screen_history+      
-    jmp !exit-
+!:  jsr !admin_screen_history+                    //
+    jmp !exit-                                    //
+                                                  //
+!exit_F2:                                             
+    lda #6
+    sta $748
+    jmp !exit-                                    //
     
 !preventGraphChars:                               //
     cmp #175                                      // allow underscore, move to the exit
@@ -1919,46 +1962,41 @@ rts
     jsr !messagenoise+                            // make some noise now, there's a message!
     lda CHECKREPEAT                               // reset the check interval
     sta CHECKINTERVAL                             // 
-    dec WAITFORMESSAGE
+    dec WAITFORMESSAGE                            //
 !sysmsg:                                          //
     lda RXBUFFER                                  // the first number in the rx buffer is the number of lines
     cmp #5                                        // this number should be 1 or 2 or 3. But not 4 or higher.
     bcs !error+                                   // jump to error (to display an error) if the number >= 5
-    lda RXBUFFER                                  // load the number of lines in the y register
     cmp #0                                        // if this number is 0, that also is no good, should be 1,2,3 or 4                                         
     beq !shifterror+                              //
-    ldy RXBUFFER                                  //
-                                                  // Shift the screen up,
+    tay                                           // Shift the screen up,
 !up:                                              // repeat the shift_up routine as many times as needed
     jsr !Shift_Screen_up+                         // the RXBUFFER starts with the number of lines
     dey                                           // 
     cpy #0                                        // 
-    bne !up-                                      // 
-                                                  // 
+    bne !up-                                      //  
     ldx RXBUFFER                                  // 
     lda message_start,x                           // load the start line from the message_start array, using x as the index
-                                                  // 
-    sta $f7                                       // 
+    sta _SCREENLINE_                              // 
     lda #0                                        // 
-    sta $f8                                       // 
+    sta _SCREENCOLM_                              // 
     lda #1                                        // 
     sta OFFSET                                    // used to offset the index when reading the buffer in displaytextK
                                                   // 
-!load_buffer:                                     // 
-                                                  // 
+!load_buffer:                                     //  
     lda #<(RXBUFFER)                              // 
     sta _BUFFER_POINTER_                          // 
     lda #>(RXBUFFER)                              // 
     sta _BUFFER_POINTER_ +1                       // 
     jsr !preparePrintBuffer+                      //
     jsr !displaytextK+                            // 
+    jsr !hold_the_line-                           //
     lda PRINTER_ENABLED_FLAG                      // Do we have a printer enabled?
     cmp #1                                        //
     bne !+                                        //
     jsr !printTextK+                              //
 !:  lda #0                                        // 
     sta OFFSET                                    // reset the offset buffer.
-                                                  // 
 !exit:                                            // 
                                                   // 
     lda TEMPCOLOR                                 // restore the current color
@@ -1971,9 +2009,9 @@ rts
     jmp !exit-                                    // 
 !shifterror:                                      // 
     jmp !exit-                                    // 
-
+                                                  //
 !messagenoise:                                    //
-   lda SCREEN_ID  
+   lda SCREEN_ID                                  //
    cmp #0
    bne !+
    playsong(song0)
@@ -1993,9 +2031,9 @@ rts
     jsr !send_start_byte_ff+                      // Call the sub routine to obtain connection status from esp32
                                                   // 
     lda #21                                       // display this on line 21
-    sta $f7                                       // $f7 is used in displaytextK as the line number
+    sta _SCREENLINE_                              // $f7 is used in displaytextK as the line number
     lda #26                                       // display this test at row (or column) 26
-    sta $f8                                       // $f8 is used as the row number in displaytextK
+    sta _SCREENCOLM_                              // $f8 is used as the row number in displaytextK
     lda #12                                       // load the default color
     sta $0286                                     // store in address 0286 which holds the current color
     jsr !load_buffer-                             // 
@@ -2036,21 +2074,21 @@ rts
                                                   // set source pointers
     inx                                           // increase x (the source is always 1 line below the destination)
     lda screen_lines_low,x                        // 
-    sta $f7                                       // 
+    sta _SCREENADRR_                              // 
     sta _LINE_POS_                                // 
     lda screen_lines_high,x                       // 
-    sta $f8                                       // 
+    sta _SCREENADRR_ +1                           // 
     lda color_lines_high,x                        // 
     sta _LINE_POS_ +1                             // 
                                                   // 
     ldy #0                                        // y is the character counter (40 characters per line)
 !readwrite:                                       // start the copy
-    lda ($f7),y                                   // read character information
+    lda (_SCREENADRR_),y                          // read character information
     sta ($f9),y                                   // write character information
     lda (_LINE_POS_),y                            // read color information
     sta ($fd),y                                   // write color information
     lda #32                                       // load the space character
-    sta ($f7),y                                   // overwrite the source character
+    sta (_SCREENADRR_),y                          // overwrite the source character
     iny                                           // increase y
     cpy #40                                       // are we at the end of the line?
     bne !readwrite-                               // if not continue the loop
@@ -2464,9 +2502,9 @@ rts                                               //
 !:  ldx #18                                       // 
 !loop:                                            // 
     lda screen_lines_low,x                        // 
-    sta $f7                                       // 
+    sta _SCREENADRR_                              // 
     lda color_lines_high,x                        // 
-    sta $f8                                       // 
+    sta _SCREENADRR_ +1                           // 
     jsr !shift_color_line_to_right+               // 
     inx                                           // 
     cpx #24                                       // 
@@ -2516,38 +2554,37 @@ rts                                               //
 //  SUB ROUTINE TO SHIFT THE COLORS IN THE STAR LINES TO RIGHT
 //=========================================================================================================
 !shift_color_line_to_right:                       // a pointer to the color memory address where the line we want to shift starts
-                                                  // is stored in zero page address $f7, $f8
+                                                  // is stored in zero page address $f7, $f8 = _SCREENADRR_ , _SCREENADRR_ +1
                                                   // shifting a line to the right is a bit more complicated as to shifting to the left.
                                                   // to better explain we have this line as example ABCDEFGH
                                                   // remember that we are only shifting the colors,not the characters
-                                                  // 
     ldy #0                                        // start at postion zero (A in our line)
-    lda ($f7),y                                   // read the characters color (the zero page address $f7,$f8
-    sta $fe                                       // store it temporary in memory address $fe, so now A is stored in $fe
+    lda (_SCREENADRR_),y                          // read the characters color (the zero page address $f7,$f8
+    sta _TEMPADRR_                                // store it temporary in memory address $fe, so now A is stored in $fe
                                                   // 
 !loop:                                            // 
     iny                                           // increase our index, y
-    lda ($f7),y                                   // read the color at the next postion (B in our line of data)
+    lda (_SCREENADRR_),y                          // read the color at the next postion (B in our line of data)
     sta COLOR                                     // store color B temporary in memory address $ff, so now B is stored in $ff
-    lda $fe                                       // now load $fe (that contains A) back into the accumulator
-    sta ($f7),y                                   // and store it where B was. The Data line looks like this now AACDEFGH (A has shifted to the right and B is in temporary storage at $ff)
+    lda _TEMPADRR_                                // now load $fe (that contains A) back into the accumulator
+    sta (_SCREENADRR_),y                          // and store it where B was. The Data line looks like this now AACDEFGH (A has shifted to the right and B is in temporary storage at $ff)
     iny                                           // increase y again
-    lda ($f7),y                                   // Read the color on the next position (C in our line of data)
-    sta $fe                                       // Store it it temporary in memory address $fe, so now B is stored in $fe
+    lda (_SCREENADRR_),y                          // Read the color on the next position (C in our line of data)
+    sta _TEMPADRR_                                // Store it it temporary in memory address $fe, so now B is stored in $fe
     lda COLOR                                     // now load $ff (that contains B) back into the accumulator
-    sta ($f7),y                                   // and put that where C was. The data line now look like this: AABDEFGH (A and B have shifted and C is in temporary storage at $fe)
+    sta (_SCREENADRR_),y                          // and put that where C was. The data line now look like this: AABDEFGH (A and B have shifted and C is in temporary storage at $fe)
     cpy #38                                       // see if we are at the end of the line 
     bne !loop-                                    // if not, jump back to the start of the loop
                                                   // after the loop we have processed 39 positions, but the line is 40 long
                                                   // At this point G is in memory storage $fe and H is in storage at $ff
     iny                                           // increase y
-    lda $fe                                       // load G
-    sta ($f7),y                                   // put it in position H
+    lda _TEMPADRR_                                // load G
+    sta (_SCREENADRR_),y                          // put it in position H
                                                   // 
                                                   // NOW the data looks like this: AABCDEFG (all colors have shifted except for H which is in storeage at $fe)
     ldy #0                                        // set the index back to zero
     lda COLOR                                     // load color H into the accumulator
-    sta ($f7),y                                   // and store it at the first position.
+    sta (_SCREENADRR_),y                          // and store it at the first position.
     rts                                           // Now our line looks like this: HABCDEFG all colors have shifted to the right one position.
                                                   // 
 //=========================================================================================================
@@ -2557,20 +2594,20 @@ rts                                               //
                                                   // for instance all the memory addresses (in color memory) in the array 'stars1' get color 7. the array ends with 0
                                                   // the pointer to the array (stars1 for example) is stored in zero page address $fe, $ff. the wanted color is in $fd
     ldy #0                                        // y needs to be our index of both the color memory and the array index, we can not use x because we need Indirect-indexed addressing and that can only be done with y
-    sty $fa                                       // So we use zero page memory address $fa to store the value of y
+    sty _SCREENADRR_                              // So we use zero page memory address $fa to store the value of y
                                                   // 
 !color_loop:                                      //      
-    ldy $fa                                       // load y from $fa
-    lda ($fe),y                                   // get the value from the stars array with index y, WATCH OUT: the array contains words (16 bit values) but this action will only read the first byte of that word
+    ldy _SCREENADRR_                              // load y from $fa
+    lda (_TEMPADRR_),y                            // get the value from the stars array with index y, WATCH OUT: the array contains words (16 bit values) but this action will only read the first byte of that word
     cmp #0                                        // if it contains 0, we have reached the end
     beq !exit+                                    // exit in that case
     sta _LINE_POS_                                // if not store the value in zero page address $b.
-    inc $fa                                       // increase $fa
-    ldy $fa                                       // load $fa into y 
-    lda ($fe),y                                   // get the next value from the stars array, this is the second byte of our 16 bit word
+    inc _SCREENADRR_                              // increase $fa
+    ldy _SCREENADRR_                              // load $fa into y 
+    lda (_TEMPADRR_),y                            // get the next value from the stars array, this is the second byte of our 16 bit word
     sta _LINE_POS_ +1                             // store that value in $fc
                                                   // now we have a pointer in location $fb, $fc. taken from our stars array and pointing to an address in color memory
-    inc $fa                                       // increase $fa for the next round
+    inc _SCREENADRR_                              // increase $fa for the next round
     ldy #0                                        // reset y to zero
                                                   // 
     lda COLOR                                     // load the color  
@@ -2598,10 +2635,8 @@ rts                                               //
     sta INVERT                                    // in to INVERT
     inc OFFSET                                    // increase the start index, so the byte 143 is skipped
                                                   // 
-!:                                                // $f7 = line number
-                                                  // $f8 = column
-                                                  // $fb $fc = pointer to the text
-    ldx $f7                                       // zero page f7 has the line number where the text should be displayed
+!:                                                // $fb $fc = pointer to the text
+    ldx _SCREENLINE_                              // zero page f7 has the line number where the text should be displayed
     lda screen_lines_low,x                        // we need to create a pointer in $c1 $c2 to the location in screen RAM
     sta $c1                                       // and a pointer in $c3 $c4 to the location in color RAM
     sta $c3                                       // the lower byte of the color ram is the same as the screen ram
@@ -2612,7 +2647,7 @@ rts                                               //
                                                   // 
     clc                                           // Clear the carry flag, we are going to do some additions (adc) so we need to clear the flag
     lda $c3                                       // load the low byte of the pointer to color RAM (the pointer is in $c3,$c4)
-    adc $f8                                       // add the column number (stored in $f8)
+    adc _SCREENCOLM_                              // add the column number (stored in $f8)
     sta $c3                                       // put the result back in $c3 (the low byte for the screen RAM pointer)
     sta $c1                                       // Also put the same value in $c1 (the low byte for the color RAM pointer)
     bcc !setup_index+                             // if the result was bigger than #$FF (#255) then the carry flag is set and we need to increase the high byte of the pointer also
@@ -2648,13 +2683,13 @@ rts                                               //
 !:  inc $ff                                       // increase the buffer index
     cmp #144                                      // if the byte is 144 or higher, it is not a character but a color code
     bcc !+                                        // if not skip to the next !: label
-    sta $f7                                       // store the color code in this address
+    sta $5c                                       // store the color code in this address
     jmp !readbuffer-                              // and jump back to read the next byte from the text/buffer
                                                   // 
 !:  ldy $fe                                       // load the screen index into y
     ora INVERT                                    // do a bitwise OR operation with the number in address $4b. If the number is 0 nothing will happen. If the number is 128 the character will invert!
     sta ($c1),y                                   // write the character, $c1-$c2 contains a pointer to the address of screen RAM, y is the offset
-    lda $f7                                       // load the current color from $f7. this adres contains the current color
+    lda $5c                                       // load the current color from $5c. this adres contains the current color
     sta ($c3),y                                   // change the color of the character, $c3-$c4 contains a pointer an address in color RAM, y is the offset
     inc $fe                                       // increase the screen index
     jmp !readbuffer-                              // jump back to the beginning of the loop to read the next byte from the text/buffer
@@ -3298,7 +3333,7 @@ song5: .byte 8,28,7,0,8,24,7,0,8,26,255
 // VARIABLE BUFFERS
 //=========================================================================================================
 .segment Variables [start=$3200, virtual]
-PRINTER_ENABLED_FLAG:     .byte 0         // Output to printer flag
+PRINTER_ENABLED_FLAG:         .byte 0             // Output to printer flag
 PRINTERBUFFER:                .fill 165,0
 USER_LIST_FLAG:               .byte 0             // User list source flag   
 READLIMIT:                    .byte 0             // How many chars to read from screen (in configuration screens)
@@ -3367,9 +3402,9 @@ TIMEOUT2:                     .byte 0             //
                                                   // $fb $fc = pointer to the text
                                                   // 
     lda #line                                     // 
-    sta $f7                                       // store the line in zero page address $f7
+    sta _SCREENLINE_                              // store the line in zero page address $f7
     lda #column                                   // 
-    sta $f8                                       // store the column in zero page address $f8
+    sta _SCREENCOLM_                              // store the column in zero page address $f8
     lda #<(text)                                  // store the lowbyte of the text location in zero page address $fb
     sta _BUFFER_POINTER_                          // $fb is a zero page address
     lda #>(text)                                  // store the highbyte of the text location in $fc
