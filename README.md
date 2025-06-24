@@ -1,31 +1,14 @@
-# Chat64
+# OSC64
 
-**The Chat Cartridge for the Commodore64.**
+**The OSC addition for your Chat64 Cartridge on the Commodore64.**
 
-Website: https://chat64.nl/
-
-Facebook: https://www.facebook.com/groups/chat64
-
-A few years ago Bart had the idea to build a chat application for the Commodore 64.
-After some revisions and hardware alterations a few cartridges were developed and spread amongst a small group of users. For a while nothing happened, also because of a server crash. Until Theo, who was one of the early testers of the project, reached out to Bart. Bart & Theo redesigned the hard- and software and rebuilt the webserver 
-
-![DevBoard](/Artwork/thtrev2.png)
-
-At the moment there are a few boards being designed. A development board for development and testing purposes and two boards for general usage. One board consist of SMD components, but for those who want to build a cartridge themselves, but who do not feel comfortable soldering SMD components a THT version is designed.
-
-New versions of the boards are being designed as a flaw was discovered, resulting in incompatible cartridges with some C64 hardware revisions. So please check out this repo frequently to check for changes.
-
+Information about this great cartridge by Bart Venneker and Theo van den Beld here: https://chat64.nl/
 ![DevBoard](/Artwork/devrev28.png)
 
-If you like our project and want to make a donation, please feel free to do so by using the following button.
+All original files are forked 1:1 in this repo, I just added extra osc64 folders/files in the ESP32 Sketch folder and the Kick ASM folder.
 
-[![Donate](/Artwork/paypal_donate.png)](https://www.paypal.com/donate?token=sVUJWUozTAJGfD-OZDfTi14UW3HNgyHZ6DoBVbhWsuBZs75e19n5owaXz7q3mEBnWwirD8HhmM4M91Ft)
+This is an altered version of the original chat64 software written by Bart and Theo.
+It adds the ability to send OSC ( https://en.wikipedia.org/wiki/Open_Sound_Control )to 5 different devices while still maintaining the original chat functionality.
+Some menu options have been altered and the original help and about screens are replaced to make place for the osc setup and send screens. The assembly code might look a bit hacky because I had some trouble implementing my ideas in the existing code ;)
 
-
----
-
-
-By Bart Venneker and Theo van den Beld
-
-
-22-02-2024
+The osc parser accepts string, integer, float and boolean statements.
