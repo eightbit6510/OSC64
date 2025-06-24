@@ -5,11 +5,9 @@
 **Update your Libraries and Boards in Arduino IDE**
 This revision uses ESP32 version 3.0 (in boards manager)
 
-1) Download the zip file from this folder and extract it. You now should have a folder called: C64_Chat_3_81 with all file files in it.
-
-<img src="/Artwork/updt1.png" width="300">
+1) Download the OSC64 folder from this folder and extract it. You now should have a folder called: OSC64 with all file files in it.
  
-2) Open C64_Chat_3_85.ino in Arduino IDE. You should see that the other files have been opened automatically.
+2) Open OSC64.ino in Arduino IDE. You should see that the other files have been opened automatically.
 
 <img src="/Artwork/updt2.png" width="400">
 
@@ -27,4 +25,3 @@ This revision uses ESP32 version 3.0 (in boards manager)
 <img src="/Artwork/updt4.png" width="400">
 
 ---
-last updated for version 3.85
