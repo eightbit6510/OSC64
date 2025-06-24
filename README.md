@@ -12,3 +12,13 @@ It adds the ability to send OSC ( https://en.wikipedia.org/wiki/Open_Sound_Contr
 Some menu options have been altered and the original help and about screens are replaced to make place for the osc setup and send screens. The assembly code might look a bit hacky because I had some trouble implementing my ideas in the existing code ;)
 
 The osc parser accepts string, integer, float and boolean statements.
+
+Some features I'd like to add in the future:
+
+- Restructure menu 
+- Improved cue list with:
+                          -  Trigger at [Time of Day]
+                          -  Auto-follow [Wait Time] to Cue [#]
+- Paddle support to send realtime integer data along with a pre configured OSC command
+- OSC edit and fire mode that allows for binding OSC commands to different keys
+- Addition of MQTT ( https://en.wikipedia.org/wiki/MQTT ) protocol for controlling internet of things devices 
