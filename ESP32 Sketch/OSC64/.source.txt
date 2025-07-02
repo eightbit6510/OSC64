@@ -1,0 +1,19 @@
+
+*=$0810
+
+        jsr $e544
+        lda #$00
+        sta $d020
+        sta $d021
+        ldy #$00
+!:      lda $4400,y
+        sta $0400,y
+        lda $4500,y
+        sta $0500,y
+        lda $4600,y
+        sta $0600,y
+        lda $4700,y
+        sta $0700,y
+        iny
+        bne !-
+        rts
