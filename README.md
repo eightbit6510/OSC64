@@ -17,7 +17,7 @@ In the OSC setup screen entering ip 0.0.0.0 and port 0 skips the ip.
 *** New Version info: ***
 
 - Improved OSC send screen. F3 toggles Playback mode and Edit mode screens. New OSC commands can be max 80 characters long.
-![Cuelist](/Artwork/Screenshot 2025-07-03 at 00.47.18.png)
+
 
 - F1 in the OSC send screen enters OSC busk mode. Keys A through Z + space and 1 through 0 immediately send an OSC command to the configured IP's
 
