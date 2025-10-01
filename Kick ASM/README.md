@@ -1,6 +1,4 @@
-# Chat64
 
-**The Chat Cartridge for the Commodore64.**
 
 When flashing the ESP32 you need to make sure you have installed following tools and libraries:
 
