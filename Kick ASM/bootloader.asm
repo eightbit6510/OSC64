@@ -9,7 +9,9 @@
   .word coldstart                // Cartridge cold-start vector dynamic
   .word warmstart                // Cartridge warm-start vector dynamic
   .byte $C3, $C2, $CD, $38, $30  // CBM8O - Cartridge present string
-                                 //
+
+
+
 //=========================================================================================================
 //  Cold start procedure
 //=========================================================================================================
@@ -35,7 +37,6 @@ warmstart:
     jsr $e422   // Power-up message / NEW command
     ldx #$fb
     txs         // Reduce stack pointer for BASIC
-    
 
 //=========================================================================================================
 // Main program
@@ -47,7 +48,6 @@ warmstart:
                           // tell the ESP32 we are ready to recieve data        
   lda #100
   sta $de00               // write byte 100 to IO1
-
                           // All the real actions is interupt driven, through the NMI routine
 !wait:                    // We just wait here
   lda $02                 // until the value of $02 is zero
@@ -62,7 +62,12 @@ warmstart:
   sta $d021
   jsr $A660               // CLR
   cli                     // enable interrupts
-  jmp $a7ae               // jump to basic RUN command
+  lda $0801               // Detect exomizer-packed PRG (basic link = $080b)
+  cmp #$0b                // vs normal PRG link ($080e)
+  beq !packed+            //
+  jmp $0810               // Unpacked PRG: enter main_init directly
+!packed:
+  jmp $080d               // Packed PRG: enter exomizer decruncher (SYS 2061)
 
 
 

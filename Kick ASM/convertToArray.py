@@ -13,33 +13,23 @@ import sys
 import os
 import datetime
 
-n = len(sys.argv)
-inputfile= sys.argv[1]
-outfolder= sys.argv[2]   # outfolder = "/home/bart/GitHub/Chat64/ESP32 Sketch"
+inputfile = sys.argv[1]
+outfolder = sys.argv[2]   # outfolder = "/home/bart/GitHub/Chat64/ESP32 Sketch"
+asmfile = sys.argv[3] if len(sys.argv) > 3 else inputfile.replace(".prg", ".asm")
 
-asmfile=inputfile.replace(".prg",".asm")
-# search for version and date in inputfile
-with open(asmfile,'r') as f:
+asmversion = asmdate = "?"
+# search for version and date in asm source
+with open(asmfile, 'r') as f:
 	for strline in f.readlines():
-		if (strline.startswith("version:   ")):
+		if strline.startswith("version:   "):
 			asmversion = strline.split('"')[1]
-			 
-		if (strline.startswith("version_date:   ")):
+		if strline.startswith("version_date:   "):
 			asmdate = strline.split('"')[1]
 			 
-outputfile = None  # Initialize outputfile
-
 for root, dir, files in os.walk(outfolder):
-    if "prgfile.h" in files:
-        outputfile = os.path.join(root, "prgfile.h")
-        break  # Exit the loop once the file is found
-
-# Check if outputfile is set
-if outputfile is None:
-    # Set a default path or handle the error
-    outputfile = os.path.join(outfolder, "prgfile.h")
-    print(f"Warning: 'prgfile.h' not found. Using default path: {outputfile}")
-
+      if "prgfile.h" in files:
+         outputfile = (os.path.join(root, "prgfile.h"))      
+         
 print("converting " + inputfile +" to hex array as " + outputfile)
 print("bin size is " + str(os.path.getsize(inputfile)))
 

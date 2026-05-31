@@ -1,0 +1,7 @@
+minipro -p W27C512@DIP28 -s -z -w 64k_bootloader.bin 
+
+minipro -p W27E257@DIP28 -s -z -w 32k_bootloader.bin 
+
+minipro -p ST27128A@DIP28 -s -z -w 16k_bootloader.bin 
+
+minipro -p AT28C64 -s -z -w 8K_bootloader.bin 
