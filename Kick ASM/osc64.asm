@@ -1,13 +1,4 @@
-// General info
-// Relaunch 64 IDE: https://github.com/sjPlot/Relaunch64/releases
-// Kick assembler for java 8: https://csdb.dk/release/?id=180813
-// Memory Map: http://www.bartvenneker.nl/C64/Mem_map.html
-// PETSCI KEY CODES: http://www.bartvenneker.nl/C64/Petscii_codes.html
-// SCREEN functions: http://www.bartvenneker.nl/C64/Screen_codes.html
-// Kernal Screen functions: http://www.bartvenneker.nl/C64/kernal_screen.html
-// All Kernal functions: http://www.bartvenneker.nl/C64/kernal.html
-// Petscii editor: https://petscii.krissz.hu/
-// Vice emulator: https://vice-emu.sourceforge.io/windows.html
+
 
 // constants
 .const _LINE_COLOR_ = $9c
