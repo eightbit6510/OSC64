@@ -1,5 +1,4 @@
 #include <Preferences.h>
-#include <ArduinoJson.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <OSCMessage.h>
@@ -31,27 +30,17 @@ bool invert_reset_signal;
 bool invert_nmi_signal;
 String urgentMessage = "";
 int wificonnected = -1;
-char regStatus = 'u';
 volatile bool dataFromC64 = false;
 volatile bool io2 = false;
-bool receivingBuffer = false;  // Flag to indicate we're receiving a buffer (not a command)
-char inbuffer[250];  // a character buffer for incoming data
+bool receivingBuffer = false;
+char inbuffer[250];
 int inbuffersize = 0;
-char outbuffer[250];  // a character buffer for outgoing data
-char textsize = 0;
-int it = 0;
+char msgbuffer[500];
 int doReset = 0;
 volatile byte ch = 0;
 TaskHandle_t Task1;
-byte send_error = 0;
-int userpageCount = 0;
-char multiMessageBufferPub[3500];
-char multiMessageBufferPriv[3500];
-unsigned long first_check = 0;
 WiFiCommandMessage commandMessage;
 WiFiResponseMessage responseMessage;
-bool waitAck = false;
-int scrollBufferIndex = 0;
 
 // OSC variables
 WiFiUDP Udp;
@@ -139,9 +128,7 @@ void IRAM_ATTR isr_reset() {
 }
 
 void create_Task_WifiCore() {
-  // we create a task for the second (unused) core of the esp32
-  // this task will communicate with the web site while the other core
-  // is busy talking to the C64
+  // WiFi runs on the second core while the main core talks to the C64
   xTaskCreatePinnedToCore(
     WifiCoreLoop, /* Function to implement the task */
     "Task1",      /* Name of the task */
@@ -194,16 +181,9 @@ void setup() {
   // get the configured status from the eeprom
   configured = settings.getString("configured", "empty");
 
-  // get the registration id from the eeprom
-  regID = settings.getString("regID", "unregistered!");
-
-  // get the nick name from the eeprom
-  myNickName = settings.getString("myNickName", "empty");
-  lastprivmsg = settings.getULong("lastprivmsg", 1);       // get the last known message id (only the private is stored in eeprom)
-  server = settings.getString("server", "www.chat64.nl");  // get Chatserver ip/fqdn from eeprom
-  ssid = settings.getString("ssid", "empty");              // get WiFi credentials and Chatserver ip/fqdn from eeprom
+  ssid = settings.getString("ssid", "empty");
   password = settings.getString("password", "empty");
-  timeoffset = settings.getString("timeoffset", "+0");  // get the time offset from the eeprom
+  timeoffset = settings.getString("timeoffset", "+0");
 
   // Load OSC IP/port pairs from EEPROM
   oscServerIP = settings.getString("oscServerIP", "192.168.178.244");
@@ -281,11 +261,6 @@ void setup() {
     delay(250);
     digitalWrite(oC64RST, invert_reset_signal);
   } else {
-    settings.begin("mysettings", false);
-    settings.putInt("doReset", 0);
-    messageIds[0] = settings.getULong("lastPubMessage", 0);
-    messageIds[1] = settings.getULong("lastPrivMessage", 0);
-    settings.end();
     pastMatrix = true;
   }
   settings.begin("mysettings", false);
@@ -313,8 +288,6 @@ void setup() {
     Serial.println(macaddress);
     Serial.print("Connected to WiFi network with IP Address: ");
     Serial.println(myLocalIp);
-    Serial.print("Name of the server (from eeprom): ");
-    Serial.println(server);
 #endif
 
   } else {
@@ -329,9 +302,6 @@ void setup() {
 // ******************************************************************************
 // Main loop
 // ******************************************************************************
-unsigned long ledtimer = 0;
-int privateBufferIndex = 0;
-int publicBufferIndex = 0;
 bool wifiError = false;
 
 void loop() {
@@ -368,170 +338,73 @@ void loop() {
       wifiError = true;
     }
 
-    // 254 = C64 triggers call to the website for new public message
-    // 253 = new chat message from c64 to database
-    // 252 = C64 sends the new wifi network name (ssid) AND password AND time offset
-    // 251 = C64 ask for the current wifi ssid,password and time offset
-    // 250 = C64 ask for the first full page of messages (during startup)
-    // 249 = get result of last send action (253)
-    // 248 = C64 ask for the wifi connection status
-    // 247 = C64 triggers call to the website for new private message
-    // 246 = set chatserver ip/fqdn
-    // 245 = check if the esp is connected at all, or are we running in simulation mode?
-    // 244 = reset to factory defaults
-    // 243 = C64 ask for the mac address, registration id, nickname and regstatus
-    // 242 = do update
-    // 241 = get the number of unread private messages
-    // 240 = C64 sends the new registration id and nickname to ESP32
-    // 239 = C64 asks if updated firmware is available
-    // 238 = C64 triggers call to the chatserver to test connectivity
-    // 237 = get chatserver connectivity status
-    // 236 = C64 asks for the server configuration status and servername
-    // 235 = C64 sends server configuration status
-    // 234 = get user list first page
-    // 233 = get user list next page
-    // 232 =
-    // 231 =
-    // 230 = get current time from internet (NTP) and send to C64
-    // 229 = scroll up or down
-    // 228 = set OSC server IP and port
-    // 227 = get OSC server IP and port
-    // 226 = send OSC message
-    // 225 = save unified config (OSC, Tasmota, cues)
-    // 224 = load unified config
-    // 223 = get Tasmota device list
-    // 222 = save Tasmota device
-    // 221 = save cue list
-    // 220 = load cue list
-    //
-    // 128 = end marker, ignore
+    if (urgentMessage != "") doUrgentMessage();
 
     switch (ch) {
-      case 254:
-        // ------------------------------------------------------------------------------
-        // start byte 254 = C64 triggers call to the website for new public message
-        // ------------------------------------------------------------------------------
-        if (first_check == 0) first_check = millis();
-        doUrgentMessage();  // send urgent messages first
-
-        // if the user list is empty, get the list
-        // also refresh the userlist when we switch from public to private messaging and vice versa
-        if (onLineUsers.length() < 1 or msgtype != "public") updateUserlist = true;
-        msgtype = "public";
-
-        if (getMessageFromMMBuffer(multiMessageBufferPub, &publicBufferIndex, false)) {
-          if (Deserialize() == 1) {
-            // deserialize returns 1 of there was a message in the buffer (2 for private message).
-            send_buffer_to_C64(msgbuffer, msgbuffersize);  // send it
-            messageIds[0] = tempMessageIds[0];             // store the new message id;
-          } else sendByte(128);                            // no more messages for now.
-        } else {
-          sendByte(128);  // no more messages for now.
-          getMessage = true;
-        }
-        break;
-      case 253:
+      case 245:
         {
-          // ------------------------------------------------------------------------------
-          // start byte 253 = new chat message from c64 to database
-          // ------------------------------------------------------------------------------
-
-          // we expect a chat message from the C64
-          receive_buffer_from_C64(1);
-          String toEncode = "";
-          String RecipientName = "";
-          int mstart = 0;
-          String colorCode = "[145]";
-          // Get the RecipientName
-          // see if the message starts with '@'
-          byte b = inbuffer[1];
-          if (b == 0) {
-            toEncode = "[" + String(int(inbuffer[0])) + "]";
-            for (int x = 2; x < 15; x++) {
-              byte b = inbuffer[x];
-              if (b != 32) {
-                if (b < 127) {
-                  RecipientName = (RecipientName + screenCode_to_Ascii(b));
-                } else {
-                  colorCode = "[" + String(int(b)) + "]";
-                }
-              } else {
-                mstart = x + 1;
-                toEncode = toEncode + "@" + RecipientName + " " + colorCode;
-                break;
-              }
-            }
+          // -----------------------------------------------------------------------------------------------------
+          // start byte 245 = C64 checks if the Cartrdidge is connected at all.. or are we running in a simulator?
+          // -----------------------------------------------------------------------------------------------------
+          // receive the ROM version number
+          bool rxError;
+          //delay(100);
+          rxError = receive_buffer_from_C64(1);
+          if (rxError) configured = "fail";
+          if (!rxError and configured == "fail") {
+            settings.begin("mysettings", false);
+            configured = settings.getString("configured", "empty");
+            settings.end();
           }
 
-          for (int x = mstart; x < inbuffersize; x++) {
-            inbuffer[x] = screenCode_to_Ascii(inbuffer[x]);
-            byte b = inbuffer[x];
-            if (b > 128) {
-              toEncode = (toEncode + "[" + int(inbuffer[x]) + "]");
-            } else {
-              toEncode = (toEncode + inbuffer[x]);
-            }
+          char bns[inbuffersize + 1];
+          // filter out any unwanted bytes, keep only ./01234567890
+          for (int k = 0; k < inbuffersize; k++) {
+            if (inbuffer[k] < 45 or inbuffer[k] > 57) inbuffer[k] = 32;
           }
+          strncpy(bns, inbuffer, inbuffersize + 1);
+          String ns = bns;
+          ns.replace(" ", "");
+          romVersion = ns;
+          // respond with byte 128 to tell the commodore the cartridge is present
+          sendByte(128);
 
-          if (RecipientName != "") {
-            // is this a valid username?
-            String test_name = RecipientName;
-            test_name.toLowerCase();
+          if (!rxError) {
+            pastMatrix = true;
+          }
 #ifdef debug
-            Serial.print("known users: ");
-            Serial.println(onLineUsers);
-            Serial.println(offLineUsers);
-            Serial.print("Name under test: ");
-            Serial.println(test_name);
+          Serial.println("ROM Version=" + romVersion);
+          Serial.println("Are we in the Matrix?");
 #endif
-            if ((offLineUsers.indexOf(test_name + ';') >= 0) or (onLineUsers.indexOf(test_name + ';') >= 0)) {
-              // user exists
-              msgtype = "private";
-              pmSender = '@' + RecipientName;
-            } else {
-              // user does not exist
-              urgentMessage = "[red]System:  Unknown user:" + test_name;
-              send_error = 1;
-              break;
-            }
-          } else {
-            msgtype = "public";
-          }
-
-          int buflen = toEncode.length() + 1;
-          char buff[buflen];
-          toEncode.toCharArray(buff, buflen);
-          String Encoded = my_base64_encode(buff, buflen);
-          Encoded = urlEncode(Encoded);
-          // Now send it with retry!
-          bool sc = false;
-          int retry = 0;
-          while (sc == false and retry < 2) {
-            sendingMessage = 1;
-            commandMessage.command = SendMessageToServerCommand;
-            Encoded.toCharArray(commandMessage.data.sendMessageToServer.encoded, sizeof(commandMessage.data.sendMessageToServer.encoded));
-            RecipientName.toCharArray(commandMessage.data.sendMessageToServer.recipientName, sizeof(commandMessage.data.sendMessageToServer.recipientName));
-            commandMessage.data.sendMessageToServer.retryCount = retry;
-            xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
-            xMessageBufferReceive(responseBuffer, &responseMessage, sizeof(responseMessage), portMAX_DELAY);
-            sc = responseMessage.response.boolean;
-            // sending the message fails, take a short break and try again
-            if (!sc) {
-              delay(1000);
-              retry = retry + 1;
-            }
-          }
-          // if it still fails after a few retries, give us an error.
-          if (!sc) {
-            urgentMessage = "[red]  System:     ERROR sending the message";
-            send_error = 1;
-          } else {
-            // No error, read the message back from the database to show it on screen
-            sendingMessage = 0;
-            getMessage = true;  // get the message we just inserted
-          }
           break;
         }
+
+      case 248:
+        // ------------------------------------------------------------------------------
+        // start byte 248 = C64 ask for the wifi connection status
+        // ------------------------------------------------------------------------------
+
+        if (!isWifiCoreConnected) {
+          digitalWrite(CLED, LOW);
+          sendByte(146);
+          send_String_to_c64("Not Connected to Wifi");
+        } else {
+          wificonnected = 1;
+          digitalWrite(CLED, HIGH);
+          sendByte(149);
+          String wifi_status = "Connected with WiFi!";
+          if (myLocalIp != "0.0.0.0") wifi_status = "Connected with ip " + myLocalIp;
+          send_String_to_c64(wifi_status);
+        }
+        break;
+
+      case 251:
+        // ------------------------------------------------------------------------------
+        // start byte 251 = C64 ask for the current wifi ssid,password and time offset
+        // ------------------------------------------------------------------------------
+        send_String_to_c64(ssid + char(129) + password + char(129) + timeoffset);
+        break;
+
       case 252:
         {
           // ------------------------------------------------------------------------------
@@ -569,285 +442,7 @@ void loop() {
           //xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
           break;
         }
-      case 251:
-        // ------------------------------------------------------------------------------
-        // start byte 251 = C64 ask for the current wifi ssid,password and time offset
-        // ------------------------------------------------------------------------------
-        send_String_to_c64(ssid + char(129) + password + char(129) + timeoffset);
-        break;
-      case 249:
-        // ------------------------------------------------------------------------------
-        // start byte 249 = C64 asks if this is an existing user (for private chat)
-        // ------------------------------------------------------------------------------
-        sendByte(send_error);
-        sendByte(128);
-        send_error = 0;
-        break;
-      case 248:
-        // ------------------------------------------------------------------------------
-        // start byte 248 = C64 ask for the wifi connection status
-        // ------------------------------------------------------------------------------
 
-        if (!isWifiCoreConnected) {
-          digitalWrite(CLED, LOW);
-          sendByte(146);
-          send_String_to_c64("Not Connected to Wifi");
-        } else {
-          wificonnected = 1;
-          digitalWrite(CLED, HIGH);
-          sendByte(149);
-          String wifi_status = "Connected with WiFi!";
-          if (myLocalIp != "0.0.0.0") wifi_status = "Connected with ip " + myLocalIp;
-          send_String_to_c64(wifi_status);
-        }
-        break;
-      case 247:
-        // ------------------------------------------------------------------------------
-        // start byte 247 = C64 triggers call to the website for new private message
-        // ------------------------------------------------------------------------------
-
-        // send urgent messages first
-        doUrgentMessage();
-        // if the user list is empty, get the list
-        // also refresh the userlist when we switch from public to private messaging and vice versa
-        if (onLineUsers.length() < 1 or msgtype != "private") updateUserlist = true;
-        msgtype = "private";
-        if (getMessageFromMMBuffer(multiMessageBufferPriv, &privateBufferIndex, true)) {
-          if (Deserialize() == 2) {
-            // deserialize returns 2 of there was a private message in the buffer
-            //for (int x = 0; x < msgbuffersize; x++) outbuffer[x] = msgbuffer[x];
-
-            send_buffer_to_C64(msgbuffer, msgbuffersize);  // send it
-            messageIds[1] = tempMessageIds[1];             // store the new message id;
-            lastprivmsg = messageIds[1];
-            settings.begin("mysettings", false);
-            settings.putULong("lastprivmsg", messageIds[1]);  // store message id in eeprom
-            settings.end();
-          } else sendByte(128);  // no more messages for now.
-        } else {
-          sendByte(128);  // no more messages for now.
-          getMessage = true;
-        }
-        break;
-      case 246:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 246 = C64 sends a new chat server ip/fqdn
-          // ------------------------------------------------------------------------------
-
-          receive_buffer_from_C64(1);
-          for (int x = 0; x < inbuffersize; x++) {
-            inbuffer[x] = screenCode_to_Ascii(inbuffer[x]);
-          }
-
-          char bns[inbuffersize + 1];
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-          ns.trim();
-          server = ns;
-          settings.begin("mysettings", false);
-          settings.putString("server", ns);  // store the new server name in the eeprom settings
-          settings.end();
-
-          messageIds[0] = 0;
-          messageIds[1] = 0;
-
-          // we should also refresh the userlist
-          onLineUsers = "";
-          break;
-        }
-      case 245:
-        {
-          // -----------------------------------------------------------------------------------------------------
-          // start byte 245 = C64 checks if the Cartrdidge is connected at all.. or are we running in a simulator?
-          // -----------------------------------------------------------------------------------------------------
-          // receive the ROM version number
-          bool rxError;
-          //delay(100);
-          rxError = receive_buffer_from_C64(1);
-          if (rxError) configured = "fail";
-          if (!rxError and configured == "fail") {
-            settings.begin("mysettings", false);
-            configured = settings.getString("configured", "empty");
-            settings.end();
-          }
-
-          char bns[inbuffersize + 1];
-          // filter out any unwanted bytes, keep only ./01234567890
-          for (int k = 0; k < inbuffersize; k++) {
-            if (inbuffer[k] < 45 or inbuffer[k] > 57) inbuffer[k] = 32;
-          }
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-          ns.replace(" ", "");
-          romVersion = ns;
-          // respond with byte 128 to tell the commodore the cartridge is present
-          sendByte(128);
-
-          if (!rxError) {
-            pastMatrix = true;
-            getMessage = true;
-          }
-#ifdef debug
-          Serial.println("ROM Version=" + romVersion);
-          Serial.println("Are we in the Matrix?");
-#endif
-          break;
-        }
-      case 244:
-        {
-          // ---------------------------------------------------------------------------------
-          // start byte 244 = C64 sends the command to reset the cartridge to factory defaults
-          // ---------------------------------------------------------------------------------
-          // this will reset all settings
-          //Serial.println("__reset");
-          receive_buffer_from_C64(1);
-          char bns[inbuffersize + 1];
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-          if (ns.startsWith("RESET!")) {
-            settings.begin("mysettings", false);
-            settings.putString("regID", "unregistered!");
-            settings.putString("myNickName", "empty");
-            settings.putString("ssid", "empty");
-            settings.putString("password", "empty");
-            settings.putString("server", "www.chat64.nl");
-            settings.putString("configured", "empty");
-            settings.putString("timeoffset", "+0");
-            settings.end();
-            // now reset the esp
-            ESP.restart();
-          }
-          break;
-        }
-      case 243:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 243 = C64 ask for the mac address, registration id, nickname and regstatus
-          // ------------------------------------------------------------------------------
-          commandMessage.command = GetRegistrationStatusCommand;
-          xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
-          xMessageBufferReceive(responseBuffer, &responseMessage, sizeof(responseMessage), portMAX_DELAY);
-          regStatus = responseMessage.response.str[0];
-          send_String_to_c64(macaddress + char(129) + regID + char(129) + myNickName + char(129) + regStatus);
-          break;
-        }
-      case 242:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 242 = Do the actual update!
-          // ------------------------------------------------------------------------------
-          receive_buffer_from_C64(1);
-          char bns[inbuffersize + 1];
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-          if (ns.startsWith("UPDATE!")) {
-            outByte(1);
-            detachInterrupt(C64IO1);  // disable IO1 and IO2 interrupts
-            detachInterrupt(C64IO2);  // disable IO1 and IO2 interrupts
-            commandMessage.command = DoUpdateCommand;
-            xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
-          }
-          break;
-        }
-      case 241:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 241 = C64 asks for the number of unread private messages
-          // ------------------------------------------------------------------------------
-          if (pmCount > 10) pmCount = 10;
-          String pm = String(pmCount);
-          if (pmCount < 10) { pm = "0" + pm; }
-          pm = "[pm:" + pm + " (F5)]";
-          if (pmCount == 0) pm = "~~~~~~~~~~~~";
-          sendByte(156);           // send color code for gray
-          send_String_to_c64(pm);  // then send the number of messages as a string
-          break;
-        }
-      case 240:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 240 = C64 sends the new registration id and nickname to ESP32
-          // ------------------------------------------------------------------------------
-          receive_buffer_from_C64(2);
-          for (int x = 0; x < inbuffersize; x++) {
-            inbuffer[x] = screenCode_to_Ascii(inbuffer[x]);
-          }
-          // inbuffer now contains "registrationid nickname"
-          char bns[inbuffersize + 1];
-          strncpy(bns, inbuffer, inbuffersize + 1);
-          String ns = bns;
-
-          regID = getValue(ns, 129, 0);
-          regID.trim();
-#ifdef debug
-          Serial.println(regID);
-#endif
-          if (regID.length() != 16) {
-#ifdef debug
-            Serial.println("Registration code length should be 16");
-#endif
-            break;
-          }
-          myNickName = getValue(ns, 129, 1);
-          myNickName.trim();
-          myNickName.replace(' ', '_');
-#ifdef debug
-          Serial.println(myNickName);
-#endif
-
-          settings.begin("mysettings", false);
-          settings.putString("regID", regID);
-          settings.putString("myNickName", myNickName);
-          settings.end();
-          break;
-        }
-      case 239:
-        {
-          String s = newVersions;
-          if (millis() < (first_check + 10000)) s = "";
-          send_String_to_c64(s);
-          break;
-        }
-      case 238:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 238 = C64 triggers call to the chatserver to test connectivity
-          // ------------------------------------------------------------------------------
-          ServerConnectResult = "Timeout in response, try again";
-          commandMessage.command = ConnectivityCheckCommand;
-          xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
-          break;
-        }
-      case 237:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 237 = C64 triggers call to receive connection status
-          // ------------------------------------------------------------------------------
-          sendByte(ResultColor);  // send color code for green if connected
-          send_String_to_c64(ServerConnectResult);
-          break;
-        }
-      case 236:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 236 = C64 asks for the server configuration status and servername
-          // ------------------------------------------------------------------------------
-          if (!pastMatrix) configured = "fail";  // if the matrix chack has failed, we corrupt the config value
-                                                 // this will force the cartridge to try again.
-
-          send_String_to_c64(configured + char(129) + server + char(129) + SwVersion);
-#ifdef debug
-          Serial.println("response 236 = " + configured + " " + server + " " + SwVersion);
-#endif
-
-          if (configured == "fail") {
-            settings.begin("mysettings", false);  // restore the config value if needed
-            configured = settings.getString("configured", "empty");
-            settings.end();
-          }
-          break;
-        }
       case 235:
         {
           // ------------------------------------------------------------------------------
@@ -868,90 +463,25 @@ void loop() {
           settings.end();
           break;
         }
-      case 234:
-        {
-          // c64 asks for user list, first page.
-          // we send a max of 20 users in one long string
-          userpageCount = 0;
-          String ul1 = userPages[userpageCount];
-          send_String_to_c64(ul1);
-          userpageCount++;
-          break;
-        }
-      case 233:
-        {
-          // c64 asks for user list, second or third page.
-          // we send a max of 20 users in one long string
-          String ul1 = userPages[userpageCount];
-          send_String_to_c64(ul1);
-          userpageCount++;
-          break;
-        }
-      case 230:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 230 = (Unused - NTP time removed, time is set manually on C64)
-          // ------------------------------------------------------------------------------
-          sendByte(128);  // Send error marker (not implemented)
-          break;
-        }
-      case 229:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 229 = Scroll Up or Down
-          // ------------------------------------------------------------------------------
-          static String decoded_message;
-          receive_buffer_from_C64(1);
-          if (inbuffer[0] == 0) topMes = 0;
-          systemLineCount = inbuffer[1];
-          pageSize = inbuffer[2];
-          scrollDirection = inbuffer[3];  // 1 = up, 0 = down
 
-          Serial.println("Scrolling starts");
-          if (waitAck) {
-            // if waitAck is true we repeat the message
-            Serial.println("Waiting for ACK, resending last message");
-            send_String_to_c64(decoded_message);
-            break;
-          }
-          if (scrollBufferIndex == 0) {  // send a message to the other core to collect older messages
-            gotScrollMessage = 0;
-            commandMessage.command = ScrollUpDown;
-            xMessageBufferSend(commandBuffer, &commandMessage, sizeof(commandMessage), portMAX_DELAY);
-            while (gotScrollMessage == 0) delay(10);  // wait for that procedure to complete
-          }
-          // (more) data is in multiMessageBufferPub, collect a single message from the MMB
-          if (getMessageFromMMBuffer(multiMessageBufferPub, &scrollBufferIndex, false)) {
-            if (Deserialize() == 3) {  // decoded message is in the msgbuffer now
-              if (scrollDirection == 1) topMes = tempMessageIds[2];
-              if (scrollDirection == 0) botMes = tempMessageIds[2];
-              Serial.println("Wait for ACK now");
-              waitAck = true;
-              decoded_message = String(msgbuffer, msgbuffersize);
-              send_buffer_to_C64(msgbuffer, msgbuffersize);  // send it
-              if (scrollDirection == 1 and topMes != 0) botMes = 0;
-              break;
-            }
-          }
-          sendByte(128);
-          waitAck = false;
-          break;
-        }
-      case 227:
+      case 236:
         {
           // ------------------------------------------------------------------------------
-          // start byte 227 = C64 asks for OSC server IP and port
+          // start byte 236 = C64 asks for the server configuration status and servername
           // ------------------------------------------------------------------------------
-          // Combine all IPs and ports into a single string: ip1[129]port1[129]ip2[129]port2[129]...
-          // Using char(129) as delimiter for all fields since splitRXbuffer uses that
-          String response = 
-              oscServerIP + char(129) + oscServerPort + char(129) +
-              oscServerIP2 + char(129) + oscServerPort2 + char(129) +
-              oscServerIP3 + char(129) + oscServerPort3 + char(129) +
-              oscServerIP4 + char(129) + oscServerPort4 + char(129) +
-              oscServerIP5 + char(129) + oscServerPort5;
+          if (!pastMatrix) configured = "fail";  // if the matrix chack has failed, we corrupt the config value
+                                                 // this will force the cartridge to try again.
 
-          send_String_to_c64(response);
+          send_String_to_c64(configured + char(129) + char(129) + SwVersion);
+#ifdef debug
+          Serial.println("response 236 = " + configured + " " + SwVersion);
+#endif
+
+          if (configured == "fail") {
+            settings.begin("mysettings", false);  // restore the config value if needed
+            configured = settings.getString("configured", "empty");
+            settings.end();
+          }
           break;
         }
 
@@ -1190,15 +720,115 @@ void loop() {
           break;
         }
 
-      case 225:
+
+      case 227:
         {
           // ------------------------------------------------------------------------------
-          // start byte 225 = Save unified config (OSC, Tasmota, cues)
+          // start byte 227 = C64 asks for OSC server IP and port
           // ------------------------------------------------------------------------------
-          // OSC settings should already be saved when set via command 229
-          // This command can trigger a save of all current configs
+          // Combine all IPs and ports into a single string: ip1[129]port1[129]ip2[129]port2[129]...
+          // Using char(129) as delimiter for all fields since splitRXbuffer uses that
+          String response = 
+              oscServerIP + char(129) + oscServerPort + char(129) +
+              oscServerIP2 + char(129) + oscServerPort2 + char(129) +
+              oscServerIP3 + char(129) + oscServerPort3 + char(129) +
+              oscServerIP4 + char(129) + oscServerPort4 + char(129) +
+              oscServerIP5 + char(129) + oscServerPort5;
+
+          send_String_to_c64(response);
+          break;
+        }
+
+
+      case 228:
+        {
+          // ------------------------------------------------------------------------------
+          // start byte 228 = Set OSC server IP and port
+          // ------------------------------------------------------------------------------
+          receive_buffer_from_C64(1);  // Get all IP + port pairs in one buffer
+
+          // Convert to ASCII and null-terminate
+          char oscMsg[256];
+          int i;
+          for (i = 0; i < inbuffersize && i < 255; i++) {
+            oscMsg[i] = screenCode_to_Ascii(inbuffer[i]);
+            if (oscMsg[i] == '\0') break;
+          }
+          oscMsg[i] = '\0';
+
+          // Split into 10 fields: ip1[129]port1[129]ip2[129]port2[129]...
+          // Using char(129) as delimiter for all fields
+          String fields[10];
+          int fieldIndex = 0;
+          int lastPos = 0;
+          
+          for (int i = 0; i <= inbuffersize && fieldIndex < 10; i++) {
+            if (i == inbuffersize || oscMsg[i] == '\x81') {  // 129 in hex
+              oscMsg[i] = '\0';
+              if (i > lastPos) {
+                fields[fieldIndex] = String(&oscMsg[lastPos]);
+                fields[fieldIndex].trim();
+                fieldIndex++;
+              }
+              lastPos = i + 1;
+            }
+          }
+          
+          // Assign fields to OSC IP/port pairs
+          if (fieldIndex >= 2) {
+            oscServerIP = fields[0];
+            oscServerPort = fields[1];
+            // Remove non-digit characters from port
+            for (int k = 0; k < oscServerPort.length(); k++) {
+              if (!isdigit(oscServerPort[k])) {
+                oscServerPort.remove(k);
+                k--;
+              }
+            }
+          }
+          if (fieldIndex >= 4) {
+            oscServerIP2 = fields[2];
+            oscServerPort2 = fields[3];
+            for (int k = 0; k < oscServerPort2.length(); k++) {
+              if (!isdigit(oscServerPort2[k])) {
+                oscServerPort2.remove(k);
+                k--;
+              }
+            }
+          }
+          if (fieldIndex >= 6) {
+            oscServerIP3 = fields[4];
+            oscServerPort3 = fields[5];
+            for (int k = 0; k < oscServerPort3.length(); k++) {
+              if (!isdigit(oscServerPort3[k])) {
+                oscServerPort3.remove(k);
+                k--;
+              }
+            }
+          }
+          if (fieldIndex >= 8) {
+            oscServerIP4 = fields[6];
+            oscServerPort4 = fields[7];
+            for (int k = 0; k < oscServerPort4.length(); k++) {
+              if (!isdigit(oscServerPort4[k])) {
+                oscServerPort4.remove(k);
+                k--;
+              }
+            }
+          }
+          if (fieldIndex >= 10) {
+            oscServerIP5 = fields[8];
+            oscServerPort5 = fields[9];
+            for (int k = 0; k < oscServerPort5.length(); k++) {
+              if (!isdigit(oscServerPort5[k])) {
+                oscServerPort5.remove(k);
+                k--;
+              }
+            }
+          }
+
+          // Save all pairs to EEPROM
           settings.begin("mysettings", false);
-          // Save OSC settings
           settings.putString("oscServerIP", oscServerIP);
           settings.putString("oscServerPort", oscServerPort);
           settings.putString("oscServerIP2", oscServerIP2);
@@ -1209,43 +839,12 @@ void loop() {
           settings.putString("oscServerPort4", oscServerPort4);
           settings.putString("oscServerIP5", oscServerIP5);
           settings.putString("oscServerPort5", oscServerPort5);
-          // Save Tasmota device count
-          settings.putInt("tasmotaCount", tasmotaDeviceCount);
           settings.end();
+
           sendByte(128);
           break;
         }
 
-      case 224:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 224 = Load unified config (on startup)
-          // ------------------------------------------------------------------------------
-          // Configs are loaded in setup(), this command can trigger a reload
-          settings.begin("mysettings", false);
-          oscServerIP = settings.getString("oscServerIP", "192.168.178.244");
-          oscServerPort = settings.getString("oscServerPort", "8888");
-          oscServerIP2 = settings.getString("oscServerIP2", "0.0.0.0");
-          oscServerPort2 = settings.getString("oscServerPort2", "0");
-          oscServerIP3 = settings.getString("oscServerIP3", "0.0.0.0");
-          oscServerPort3 = settings.getString("oscServerPort3", "0");
-          oscServerIP4 = settings.getString("oscServerIP4", "0.0.0.0");
-          oscServerPort4 = settings.getString("oscServerPort4", "0");
-          oscServerIP5 = settings.getString("oscServerIP5", "0.0.0.0");
-          oscServerPort5 = settings.getString("oscServerPort5", "0");
-          
-          tasmotaDeviceCount = settings.getInt("tasmotaCount", 0);
-          for (int i = 0; i < tasmotaDeviceCount && i < 10; i++) {
-            String prefix = "tasmota" + String(i);
-            tasmotaDevices[i].name = settings.getString((prefix + "name").c_str(), "");
-            tasmotaDevices[i].ip = settings.getString((prefix + "ip").c_str(), "");
-            tasmotaDevices[i].username = settings.getString((prefix + "user").c_str(), "");
-            tasmotaDevices[i].password = settings.getString((prefix + "pass").c_str(), "");
-          }
-          settings.end();
-          sendByte(128);
-          break;
-        }
 
       case 223:
         {
@@ -1313,6 +912,7 @@ void loop() {
           send_String_to_c64(deviceList);
           break;
         }
+
 
       case 222:
         {
@@ -1468,149 +1068,6 @@ void loop() {
           break;
         }
 
-      case 221:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 221 = Save cue list to ESP32
-          // ------------------------------------------------------------------------------
-          receive_buffer_from_C64(2);  // Cue list data
-          // Store cue list data (raw screen codes)
-          settings.begin("mysettings", false);
-          // Store as binary data - convert to base64 or store raw
-          String cueData = "";
-          for (int i = 0; i < inbuffersize && i < 2340; i++) {
-            cueData += char(inbuffer[i]);
-          }
-          settings.putString("cueList", cueData);
-          settings.end();
-          sendByte(128);
-          break;
-        }
-
-      case 220:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 220 = Load cue list from ESP32
-          // ------------------------------------------------------------------------------
-          settings.begin("mysettings", false);
-          String cueData = settings.getString("cueList", "");
-          settings.end();
-          
-          if (cueData.length() > 0) {
-            // Send cue list data back to C64 (as screen codes)
-            for (unsigned int i = 0; i < cueData.length(); i++) {
-              sendByte(Ascii_to_screenCode(cueData[i]));
-            }
-          }
-          sendByte(128);
-          break;
-        }
-
-      case 228:
-        {
-          // ------------------------------------------------------------------------------
-          // start byte 228 = Set OSC server IP and port
-          // ------------------------------------------------------------------------------
-          receive_buffer_from_C64(1);  // Get all IP + port pairs in one buffer
-
-          // Convert to ASCII and null-terminate
-          char oscMsg[256];
-          int i;
-          for (i = 0; i < inbuffersize && i < 255; i++) {
-            oscMsg[i] = screenCode_to_Ascii(inbuffer[i]);
-            if (oscMsg[i] == '\0') break;
-          }
-          oscMsg[i] = '\0';
-
-          // Split into 10 fields: ip1[129]port1[129]ip2[129]port2[129]...
-          // Using char(129) as delimiter for all fields
-          String fields[10];
-          int fieldIndex = 0;
-          int lastPos = 0;
-          
-          for (int i = 0; i <= inbuffersize && fieldIndex < 10; i++) {
-            if (i == inbuffersize || oscMsg[i] == '\x81') {  // 129 in hex
-              oscMsg[i] = '\0';
-              if (i > lastPos) {
-                fields[fieldIndex] = String(&oscMsg[lastPos]);
-                fields[fieldIndex].trim();
-                fieldIndex++;
-              }
-              lastPos = i + 1;
-            }
-          }
-          
-          // Assign fields to OSC IP/port pairs
-          if (fieldIndex >= 2) {
-            oscServerIP = fields[0];
-            oscServerPort = fields[1];
-            // Remove non-digit characters from port
-            for (int k = 0; k < oscServerPort.length(); k++) {
-              if (!isdigit(oscServerPort[k])) {
-                oscServerPort.remove(k);
-                k--;
-              }
-            }
-          }
-          if (fieldIndex >= 4) {
-            oscServerIP2 = fields[2];
-            oscServerPort2 = fields[3];
-            for (int k = 0; k < oscServerPort2.length(); k++) {
-              if (!isdigit(oscServerPort2[k])) {
-                oscServerPort2.remove(k);
-                k--;
-              }
-            }
-          }
-          if (fieldIndex >= 6) {
-            oscServerIP3 = fields[4];
-            oscServerPort3 = fields[5];
-            for (int k = 0; k < oscServerPort3.length(); k++) {
-              if (!isdigit(oscServerPort3[k])) {
-                oscServerPort3.remove(k);
-                k--;
-              }
-            }
-          }
-          if (fieldIndex >= 8) {
-            oscServerIP4 = fields[6];
-            oscServerPort4 = fields[7];
-            for (int k = 0; k < oscServerPort4.length(); k++) {
-              if (!isdigit(oscServerPort4[k])) {
-                oscServerPort4.remove(k);
-                k--;
-              }
-            }
-          }
-          if (fieldIndex >= 10) {
-            oscServerIP5 = fields[8];
-            oscServerPort5 = fields[9];
-            for (int k = 0; k < oscServerPort5.length(); k++) {
-              if (!isdigit(oscServerPort5[k])) {
-                oscServerPort5.remove(k);
-                k--;
-              }
-            }
-          }
-
-          // Save all pairs to EEPROM
-          settings.begin("mysettings", false);
-          settings.putString("oscServerIP", oscServerIP);
-          settings.putString("oscServerPort", oscServerPort);
-          settings.putString("oscServerIP2", oscServerIP2);
-          settings.putString("oscServerPort2", oscServerPort2);
-          settings.putString("oscServerIP3", oscServerIP3);
-          settings.putString("oscServerPort3", oscServerPort3);
-          settings.putString("oscServerIP4", oscServerIP4);
-          settings.putString("oscServerPort4", oscServerPort4);
-          settings.putString("oscServerIP5", oscServerIP5);
-          settings.putString("oscServerPort5", oscServerPort5);
-          settings.end();
-
-          sendByte(128);
-          break;
-        }
-
       default:
         {
           sendByte(128);
@@ -1619,6 +1076,16 @@ void loop() {
     }  // end of case statements
   }    // end of "if (dataFromC64)"
 }  // end of main loop
+
+void softReset(int d) {
+  if (d > 0) Serial.println("-=== Soft Reset! ===-");
+  settings.begin("mysettings", false);
+  settings.putInt("doReset", 157);
+  settings.end();
+  delay(100);
+  ESP.restart();
+}
+
 
 // ******************************************************************************
 // void to set a byte in the 74ls244 buffer
